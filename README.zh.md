@@ -1,11 +1,23 @@
-# oh-my-dsh
+<p align="center">
+  <img src="https://raw.githubusercontent.com/amplifthq/oh-my-dsh/main/assets/hero.svg" alt="oh-my-dsh" width="800">
+</p>
 
-[![npm](https://img.shields.io/npm/v/oh-my-dsh?logo=npm)](https://www.npmjs.com/package/oh-my-dsh)
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <strong>开箱即用的 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> 日常发行版。</strong><br>
+  Overlay，不是 fork。
+</p>
 
-[English](README.md) | 中文
+<p align="center">
+  <a href="https://www.npmjs.com/package/oh-my-dsh"><img src="https://img.shields.io/npm/v/oh-my-dsh?style=flat&colorA=222222&colorB=CB3837" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/oh-my-dsh"><img src="https://img.shields.io/npm/dm/oh-my-dsh?style=flat&colorA=222222&colorB=CB3837" alt="npm downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/amplifthq/oh-my-dsh?style=flat&colorA=222222&colorB=58A6FF" alt="license"></a>
+  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat&colorA=222222&logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/oh-my-dsh?style=flat&colorA=222222&colorB=5FA04E" alt="Node.js"></a>
+</p>
 
-**开箱即用、适合日常写代码的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 发行版。**
+<p align="center">
+  <a href="README.md">English</a> | 中文
+</p>
 
 DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、可选 DAP 调试、通知、usage 汇总和持久代码 kernel。
 

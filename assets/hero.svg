@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">oh-my-dsh</title>
+  <desc id="desc">A daily-driver distribution of DeepSeek Harness. Overlay, not a fork.</desc>
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101218"/>
+      <stop offset="1" stop-color="#0b0c10"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c9a15a" stop-opacity="0"/>
+      <stop offset="0.35" stop-color="#c9a15a"/>
+      <stop offset="0.65" stop-color="#c9a15a"/>
+      <stop offset="1" stop-color="#c9a15a" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="520" fill="url(#ground)"/>
+
+  <!-- Three offset planes: base, profile, overlay. -->
+  <g transform="translate(548 86)">
+    <rect x="28" y="36" width="156" height="18" rx="3" fill="#1c1f27"/>
+    <rect x="14" y="18" width="156" height="18" rx="3" fill="#2a2e38"/>
+    <rect x="0" y="0" width="156" height="18" rx="3" fill="#c9a15a"/>
+  </g>
+
+  <text x="640" y="250" text-anchor="middle" fill="#f3efe6" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="86" font-weight="600" letter-spacing="-3">oh-my-dsh</text>
+
+  <rect x="360" y="292" width="560" height="1" fill="url(#edge)"/>
+
+  <text x="640" y="348" text-anchor="middle" fill="#c9a15a" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="600" letter-spacing="6">OVERLAY, NOT A FORK</text>
+  <text x="640" y="392" text-anchor="middle" fill="#9a958c" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="22" letter-spacing="0.4">A daily-driver distribution of DeepSeek Harness</text>
+</svg>
