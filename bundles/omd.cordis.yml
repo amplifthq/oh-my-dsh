@@ -54,14 +54,18 @@
       - CLAUDE.local.md
 
 # Prefer a configured third-party search provider, then DeepSeek's provider.
+# Fetch routes through oh-my-dsh's SSRF-hardened provider by default.
 - id: web
   config:
     searchProvider: !!js "process.env.DSH_WEB_SEARCH_PROVIDER ?? (process.env.EXA_API_KEY ? 'exa' : (process.env.PERPLEXITY_API_KEY ? 'perplexity' : 'deepseek-official'))"
-    fetchProvider: http
+    fetchProvider: !!js "process.env.DSH_WEB_FETCH_PROVIDER ?? 'omd-safe'"
 
+# Fetch is on by default: private and reserved destinations are blocked at
+# the network layer by omd-web-guard, which removes the reason upstream ships
+# it disabled. OMD_DISABLE_WEB_FETCH=1 turns the tool off again.
 - id: tool-web
   config:
-    fetch: !!js "process.env.OMD_ENABLE_WEB_FETCH === '1'"
+    fetch: !!js "process.env.OMD_DISABLE_WEB_FETCH !== '1'"
     searchTimeoutMs: 60000
     fetchTimeoutMs: 60000
 
@@ -120,6 +124,19 @@
     - id: omd-usage
       name: 'oh-my-dsh/usage'
 
+    # SSRF-hardened fetch provider; guards shell curl/wget only when the
+    # web_fetch tool has been disabled (silent-degradation interception).
+    - id: omd-web-guard
+      name: 'oh-my-dsh/web-guard'
+      config:
+        allowPrivateNetwork: !!js "process.env.OMD_WEB_FETCH_ALLOW_PRIVATE === '1'"
+        guardShellFetch: !!js "process.env.OMD_DISABLE_WEB_FETCH === '1'"
+
+    # Registers the launch directory as a workspace so the web UI's picker
+    # starts where you are. Inert outside web profiles (no workspaceRegistry).
+    - id: omd-workspace
+      name: 'oh-my-dsh/workspace'
+
     - id: omd-kernel
       name: 'oh-my-dsh/kernel'
 
@@ -145,6 +162,8 @@
       config:
         apiKey: !!js process.env.PERPLEXITY_API_KEY
 
+    # Upstream anonymous fetcher, only for an explicit opt-out of the
+    # hardened provider (it has no private-network protection).
     - id: omd-web-fetch-http
       name: '@deepseek-ai/dsh-web-fetch-http'
-      disabled: !!js "process.env.OMD_ENABLE_WEB_FETCH !== '1'"
+      disabled: !!js "process.env.DSH_WEB_FETCH_PROVIDER !== 'http'"

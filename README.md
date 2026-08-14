@@ -19,7 +19,7 @@
   English | <a href="README.zh.md">中文</a>
 </p>
 
-DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, optional DAP debugging, notifications, usage reporting, and persistent code kernels.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, and persistent code kernels.
 
 It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
@@ -54,7 +54,9 @@ npx oh-my-dsh@latest
 - `workspace-write + ask` permissions: productive by default without silently granting full host access.
 - Native tools and upstream Code Mode available together.
 - Explicit compaction, timeout, instruction-budget, and coding-persona defaults.
-- Zoned time context and desktop notifications for approvals and long-running turns.
+- Web fetch on by default through an SSRF-hardened provider — private, loopback, link-local, and cloud-metadata destinations are blocked before the request and again at connect time.
+- Zoned time context and desktop notifications for approvals, long-running turns, and input queued behind a running turn.
+- The launch directory is pre-registered as a workspace, so the Web UI picker starts where you are.
 - Upstream multi-provider support through the Web Models page.
 
 ### Code intelligence
@@ -111,7 +113,7 @@ Useful controls:
 omd                              # start the Web UI
 omd headless "fix the tests"     # run one task and exit
 omd setup                        # install or upgrade both profiles
-omd doctor                       # inspect installation status
+omd doctor                       # installation status, web fetch posture, exposed listeners
 omd config                       # print the final Cordis composition
 omd usage                        # aggregate saved-session token usage
 omd preset list                  # list curated MCP presets
@@ -135,13 +137,15 @@ Search selection follows:
 3. Perplexity when `PERPLEXITY_API_KEY` is present
 4. DeepSeek search
 
-HTTP fetch is off by default because upstream rc.6 does not yet provide complete private-network/SSRF protection:
+HTTP fetch is on by default and routes through OMD's hardened provider. IP-literal and conventionally-local destinations are rejected before any request, and every DNS resolution is re-validated at connect time, so redirects and DNS rebinding cannot reach loopback, private-range, link-local, or cloud-metadata addresses. Upstream's own provider ships without this protection, which is why fetch stays off in the reference setup — OMD closes the gap instead of inheriting the friction. (The previous `OMD_ENABLE_WEB_FETCH` opt-in is superseded.)
 
 ```sh
-OMD_ENABLE_WEB_FETCH=1 omd
+OMD_DISABLE_WEB_FETCH=1 omd        # turn the fetch tool off entirely
+OMD_WEB_FETCH_ALLOW_PRIVATE=1 omd  # allow private/internal destinations (trusted networks only)
+DSH_WEB_FETCH_PROVIDER=http omd    # explicit opt-out to upstream's unprotected provider
 ```
 
-Enable it only when you accept that risk.
+When fetch is disabled, shell fetches of public URLs (`curl`, `wget`, HTTPie) prompt for approval instead of silently bypassing the missing tool — the common failure mode where a model degrades to `curl` with a spoofed browser User-Agent. Fetches of local and private URLs (`curl localhost:3000`) are never intercepted.
 
 ### Advisor
 
@@ -182,6 +186,7 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 - MCP definitions do not start, expand environment placeholders, or expose schemas during discovery. Expansion happens on the host only after an approved activation and values never enter prompts or metadata caches.
 - Semantic refactors reject edits outside the session workspace and recheck every observed file version before writing.
 - `@file` mentions attach only workspace files, stay bounded, and treat attached content as data rather than instructions.
+- Web fetch blocks private, loopback, link-local, and cloud-metadata destinations both at URL validation and at DNS-connect time (rebinding-safe). `OMD_WEB_FETCH_ALLOW_PRIVATE=1` removes that guard; `DSH_WEB_FETCH_PROVIDER=http` selects upstream's provider, which has no such protection.
 - DAP debugging is off until `OMD_ENABLE_DEBUG=1`. Launch and attach still require an approved proposal; debuggee paths stay inside the workspace.
 - Glob-scoped Cursor rules are not applied globally when dsh cannot determine the active file.
 - Persistent kernels execute as your host user. They require approval by default and are not a sandbox.

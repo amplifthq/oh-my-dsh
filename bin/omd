@@ -165,6 +165,49 @@ function runDsh(profile, args) {
   process.exit(status)
 }
 
+function doctorWebFetch() {
+  if (process.env.OMD_DISABLE_WEB_FETCH === '1') {
+    console.log('web fetch: disabled (OMD_DISABLE_WEB_FETCH=1); shell fetches of public URLs prompt for approval')
+    return
+  }
+  const provider = process.env.DSH_WEB_FETCH_PROVIDER || 'omd-safe'
+  if (provider === 'omd-safe') {
+    const allowPrivate = process.env.OMD_WEB_FETCH_ALLOW_PRIVATE === '1'
+    console.log(`web fetch: enabled, hardened provider (private networks ${allowPrivate ? 'ALLOWED via OMD_WEB_FETCH_ALLOW_PRIVATE' : 'blocked'})`)
+  } else if (provider === 'http') {
+    console.log('web fetch: enabled, upstream http provider — WARNING: no private-network (SSRF) protection')
+  } else {
+    console.log(`web fetch: enabled, custom provider "${provider}"`)
+  }
+}
+
+// Factual report of Node TCP listeners reachable beyond loopback. Upstream
+// dsh already rejects `--host 0.0.0.0` and gates named binds behind trusted
+// hosts; this survives config drift by inspecting what actually listens.
+function doctorListeners() {
+  if (process.platform !== 'darwin' && process.platform !== 'linux') return
+  const result = spawnSync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN'], { encoding: 'utf8' })
+  if (result.error || typeof result.stdout !== 'string' || result.stdout.length === 0) return
+  const exposed = []
+  for (const line of result.stdout.split('\n').slice(1)) {
+    const columns = line.trim().split(/\s+/)
+    if (columns.length < 9) continue
+    const [command, pid] = columns
+    if (command !== 'node') continue
+    const name = columns.find((column) => /:[0-9]+$/.test(column))
+    if (!name) continue
+    const host = name.slice(0, name.lastIndexOf(':'))
+    const loopback = host === '127.0.0.1' || host === '[::1]' || host === 'localhost'
+    if (!loopback) exposed.push(`${name} (pid ${pid})`)
+  }
+  if (exposed.length === 0) {
+    console.log('listeners: all Node TCP listeners are loopback-only')
+  } else {
+    console.log(`listeners: Node processes listening beyond loopback — ${exposed.join(', ')}`)
+    console.log('  if one of these is dsh web, restart it without --host to stay loopback-only')
+  }
+}
+
 function doctor() {
   console.log(`oh-my-dsh ${manifest.version}`)
   console.log(`Node: ${process.version}`)
@@ -177,6 +220,8 @@ function doctor() {
   } catch {
     console.log('dsh: missing')
   }
+  doctorWebFetch()
+  doctorListeners()
 }
 
 function readOmdConfig() {

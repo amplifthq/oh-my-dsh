@@ -1,0 +1,11 @@
+{
+  "name": "@oh-my-dsh/workspace",
+  "version": "0.1.0",
+  "description": "Registers the launch directory as a workspace so first-run sessions start where you are.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["dsh-plugin", "deepseek-harness", "workspace"],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

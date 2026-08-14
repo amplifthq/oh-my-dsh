@@ -19,7 +19,7 @@
   <a href="README.md">English</a> | 中文
 </p>
 
-DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、可选 DAP 调试、通知、usage 汇总和持久代码 kernel。
+DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、默认开启的 SSRF 加固网页抓取、可选 DAP 调试、通知、usage 汇总和持久代码 kernel。
 
 它是 Cordis bundle，不是 fork。上游“一切皆插件”的架构保持不变，每项默认选择都可以覆盖。
 
@@ -54,7 +54,9 @@ npx oh-my-dsh@latest
 - 默认使用 `workspace-write + ask`：保持效率，但不会静默获得完整主机权限。
 - 同时提供原生工具和上游 Code Mode。
 - 显式配置 compaction、timeout、instruction budget 和 coding persona。
-- 默认提供时区时间上下文、审批通知和长任务通知。
+- 网页抓取默认开启，走 SSRF 加固 provider——私有、回环、链路本地和云 metadata 地址在请求前和建连时双重拦截。
+- 默认提供时区时间上下文、审批通知、长任务通知，以及"输入排队在运行中回合之后"的提示。
+- 启动目录会自动注册为 workspace，Web UI 选择器直接从你所在的位置开始。
 - 可通过 Web Models 页面使用上游多 provider 支持。
 
 ### 代码智能
@@ -111,7 +113,7 @@ omd trust add .
 omd                              # 启动 Web UI
 omd headless "修复失败的测试"     # 运行一个任务后退出
 omd setup                        # 安装或升级两个 profiles
-omd doctor                       # 检查安装状态
+omd doctor                       # 安装状态、fetch 安全姿态、暴露的监听端口
 omd config                       # 输出最终 Cordis 组合
 omd usage                        # 汇总已保存会话的 token usage
 omd preset list                  # 查看精选 MCP 预设
@@ -135,13 +137,15 @@ omd dsh --help                   # 直接调用底层 dsh CLI
 3. 存在 `PERPLEXITY_API_KEY` 时使用 Perplexity
 4. DeepSeek search
 
-上游 rc.6 尚未为 HTTP fetch 提供完整的 private-network/SSRF 防护，因此默认关闭：
+HTTP fetch 默认开启，走 OMD 的加固 provider：IP 字面量和本地惯用域名在发出任何请求前就被拒绝，且每次 DNS 解析都会在建连时重新校验，重定向和 DNS rebinding 都无法触达回环、私有网段、链路本地或云 metadata 地址。上游自带的 provider 没有这层防护，这正是参考组合里 fetch 默认关闭的原因——OMD 选择补上防护而不是继承这份摩擦。（旧的 `OMD_ENABLE_WEB_FETCH` 开关已不再需要。）
 
 ```sh
-OMD_ENABLE_WEB_FETCH=1 omd
+OMD_DISABLE_WEB_FETCH=1 omd        # 彻底关闭 fetch 工具
+OMD_WEB_FETCH_ALLOW_PRIVATE=1 omd  # 允许访问私有/内网地址（仅限可信网络）
+DSH_WEB_FETCH_PROVIDER=http omd    # 显式退回上游无防护 provider
 ```
 
-只在明确接受该风险时启用。
+fetch 被关闭时，shell 里对公网 URL 的抓取（`curl`、`wget`、HTTPie）会转为审批提示，而不是静默绕过缺失的工具——这正是模型带着伪装浏览器 User-Agent 偷偷降级到 `curl` 的常见失败模式。对本地和私有地址的抓取（`curl localhost:3000`）永远不会被拦截。
 
 ### Advisor
 
@@ -182,6 +186,7 @@ OMD_ENABLE_DEBUG=1 omd
 - MCP 定义在发现阶段不会启动、展开环境变量或暴露 schema。只有审批激活后才在 host 侧展开，值不会进入模型提示或元数据缓存。
 - 语义重构拒绝 session workspace 之外的 edit，并在写入前重新检查每个已观察文件的版本。
 - `@file` 只注入工作区内的文件，有大小上限，并把附件当作数据而不是指令。
+- 网页抓取在 URL 校验和 DNS 建连两个环节拦截私有、回环、链路本地和云 metadata 地址（对 rebinding 免疫）。`OMD_WEB_FETCH_ALLOW_PRIVATE=1` 会移除该防护；`DSH_WEB_FETCH_PROVIDER=http` 选择的上游 provider 没有这层防护。
 - DAP 调试默认关闭，需 `OMD_ENABLE_DEBUG=1`。launch 和 attach 仍要经过批准的 proposal；被调试路径必须位于工作区内。
 - dsh 无法确定当前文件时，不会把 glob-scoped Cursor rule 错误应用到全局。
 - 持久 kernel 以当前主机用户身份执行；它默认需要审批，不是安全沙箱。
