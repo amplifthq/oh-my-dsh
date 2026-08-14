@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/amplifthq/oh-my-dsh/main/assets/hero.svg" alt="oh-my-dsh" width="800">
+  <img src="assets/hero.svg" alt="oh-my-dsh" width="800">
 </p>
 
 <p align="center">
