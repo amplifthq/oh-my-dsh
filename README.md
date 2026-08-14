@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>A daily-driver distribution of <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>.</strong><br>
+  <strong>A curated distribution of <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>.</strong><br>
   Overlay, not a fork.
 </p>
 

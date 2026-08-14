@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>开箱即用的 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> 日常发行版。</strong><br>
+  <strong>开箱即用的 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> 精选发行版。</strong><br>
   Overlay，不是 fork。
 </p>
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
   <title id="title">oh-my-dsh</title>
-  <desc id="desc">A daily-driver distribution of DeepSeek Harness. Overlay, not a fork.</desc>
+  <desc id="desc">A curated distribution of DeepSeek Harness. Overlay, not a fork.</desc>
   <defs>
     <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#101218"/>
@@ -28,5 +28,5 @@
   <rect x="360" y="292" width="560" height="1" fill="url(#edge)"/>
 
   <text x="640" y="348" text-anchor="middle" fill="#c9a15a" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="600" letter-spacing="6">OVERLAY, NOT A FORK</text>
-  <text x="640" y="392" text-anchor="middle" fill="#9a958c" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="22" letter-spacing="0.4">A daily-driver distribution of DeepSeek Harness</text>
+  <text x="640" y="392" text-anchor="middle" fill="#9a958c" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="22" letter-spacing="0.4">A curated distribution of DeepSeek Harness</text>
 </svg>
