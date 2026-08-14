@@ -153,7 +153,7 @@ The advisor is disabled until both values are configured:
 
 ```sh
 export OMD_ADVISOR_PROVIDER=anthropic
-export OMD_ADVISOR_MODEL=claude-sonnet-4-5
+export OMD_ADVISOR_MODEL=claude-fable-5
 omd
 ```
 

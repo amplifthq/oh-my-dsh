@@ -153,7 +153,7 @@ fetch 被关闭时，shell 里对公网 URL 的抓取（`curl`、`wget`、HTTPie
 
 ```sh
 export OMD_ADVISOR_PROVIDER=anthropic
-export OMD_ADVISOR_MODEL=claude-sonnet-4-5
+export OMD_ADVISOR_MODEL=claude-fable-5
 omd
 ```
 
