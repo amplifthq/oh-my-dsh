@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { zstdCompressSync } from 'node:zlib'
 import test from 'node:test'
+import { profilePackageSpec } from '../bin/package-spec.js'
 
 const cli = resolve('bin/omd')
 
@@ -14,6 +15,19 @@ function run(args, home) {
     env: { ...process.env, DSH_HOME: home },
   })
 }
+
+test('profile dependency uses a valid registry version outside a source checkout', () => {
+  assert.equal(profilePackageSpec({
+    sourceCheckout: false,
+    packageRoot: '/tmp/unused',
+    version: '0.1.1',
+  }), '0.1.1')
+  assert.equal(profilePackageSpec({
+    sourceCheckout: true,
+    packageRoot: '/workspace/oh-my-dsh',
+    version: '0.1.1',
+  }), 'file:/workspace/oh-my-dsh')
+})
 
 test('CLI help and curated preset configuration work without booting dsh', () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-cli-'))

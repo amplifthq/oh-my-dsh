@@ -1,6 +1,6 @@
 {
   "name": "oh-my-dsh",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Plugins, sensible defaults, and a launcher for DeepSeek Harness (dsh) — everything you're missing, without forking upstream.",
   "private": false,
   "type": "module",
@@ -13,7 +13,7 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "bin": {
-    "omd": "./bin/omd"
+    "omd": "bin/omd"
   },
   "exports": {
     ".": "./dist/src/index.js",

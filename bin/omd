@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { zstdDecompressSync } from 'node:zlib'
+import { profilePackageSpec } from './package-spec.js'
 
 const require = createRequire(import.meta.url)
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -52,7 +53,11 @@ function sourceCheckout() {
 }
 
 function packageSpec() {
-  return sourceCheckout() ? `file:${packageRoot}` : `oh-my-dsh@${manifest.version}`
+  return profilePackageSpec({
+    sourceCheckout: sourceCheckout(),
+    packageRoot,
+    version: manifest.version,
+  })
 }
 
 function writeProfile(name, bundles) {
