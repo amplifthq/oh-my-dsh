@@ -7,7 +7,7 @@
 
 **开箱即用、适合日常写代码的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 发行版。**
 
-DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、安全编辑、通知、usage 汇总和持久代码 kernel。
+DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、可选 DAP 调试、通知、usage 汇总和持久代码 kernel。
 
 它是 Cordis bundle，不是 fork。上游“一切皆插件”的架构保持不变，每项默认选择都可以覆盖。
 
@@ -159,7 +159,7 @@ OMD_ENABLE_DEBUG=1 omd
 
 ### Proposal 与恢复生命周期
 
-能力激活和源码修改统一使用 `prepare → inspect → approve → commit → verify`。Proposal 只存在于当前 session，不能自行授权；应用时始终进入上游 approval service。
+能力激活、debug launch/attach 和源码修改统一使用 `prepare → inspect → approve → commit → verify`。Proposal 只存在于当前 session，不能自行授权；应用时始终进入上游 approval service。
 
 语义重构只接受纯文本 `WorkspaceEdit`。资源创建/删除/改名、server 主动发起的 `workspace/applyEdit` 和 `workspace/executeCommand` 都会被拒绝。恢复日志保存在 `$DSH_HOME/omd/refactors/`，权限为 `0600`；成功应用或回滚后删除。它保证中断后可恢复，但不宣称跨文件系统的崩溃原子性。
 
@@ -169,6 +169,8 @@ OMD_ENABLE_DEBUG=1 omd
 - 项目集成受 `omd trust` 保护。
 - MCP 定义在发现阶段不会启动、展开环境变量或暴露 schema。只有审批激活后才在 host 侧展开，值不会进入模型提示或元数据缓存。
 - 语义重构拒绝 session workspace 之外的 edit，并在写入前重新检查每个已观察文件的版本。
+- `@file` 只注入工作区内的文件，有大小上限，并把附件当作数据而不是指令。
+- DAP 调试默认关闭，需 `OMD_ENABLE_DEBUG=1`。launch 和 attach 仍要经过批准的 proposal；被调试路径必须位于工作区内。
 - dsh 无法确定当前文件时，不会把 glob-scoped Cursor rule 错误应用到全局。
 - 持久 kernel 以当前主机用户身份执行；它默认需要审批，不是安全沙箱。
 - dsh 没有 provider-neutral 定价接口，因此不会伪造金额。

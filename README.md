@@ -7,7 +7,7 @@ English | [中文](README.zh.md)
 
 **A batteries-included, daily-driver distribution of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
 
-DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, stale-safe editing, notifications, usage reporting, and persistent code kernels.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, optional DAP debugging, notifications, usage reporting, and persistent code kernels.
 
 It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
@@ -159,7 +159,7 @@ Edit either profile's `cordis.patch.yml` for profile-specific changes. `omd setu
 
 ### Proposal and recovery lifecycle
 
-Capability activation and source mutation use the same `prepare → inspect → approve → commit → verify` lifecycle. A proposal is session-local and cannot authorize itself; applying it always reaches the upstream approval service.
+Capability activation, debug launch/attach, and source mutation use the same `prepare → inspect → approve → commit → verify` lifecycle. A proposal is session-local and cannot authorize itself; applying it always reaches the upstream approval service.
 
 Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/delete/rename operations, server-driven `workspace/applyEdit`, and `workspace/executeCommand` are rejected. Recovery journals live under `$DSH_HOME/omd/refactors/` with mode `0600` and are deleted after successful apply or rollback. They make interrupted work recoverable, but do not claim filesystem-wide crash atomicity.
 
@@ -169,6 +169,8 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 - Project integrations are gated by `omd trust`.
 - MCP definitions do not start, expand environment placeholders, or expose schemas during discovery. Expansion happens on the host only after an approved activation and values never enter prompts or metadata caches.
 - Semantic refactors reject edits outside the session workspace and recheck every observed file version before writing.
+- `@file` mentions attach only workspace files, stay bounded, and treat attached content as data rather than instructions.
+- DAP debugging is off until `OMD_ENABLE_DEBUG=1`. Launch and attach still require an approved proposal; debuggee paths stay inside the workspace.
 - Glob-scoped Cursor rules are not applied globally when dsh cannot determine the active file.
 - Persistent kernels execute as your host user. They require approval by default and are not a sandbox.
 - Monetary cost is not estimated because dsh does not expose provider-neutral pricing.
