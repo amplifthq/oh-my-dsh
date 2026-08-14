@@ -1,0 +1,11 @@
+{
+  "name": "@oh-my-dsh/refactor",
+  "version": "0.1.0",
+  "description": "Previewable, version-guarded, recoverable semantic LSP refactors for DeepSeek Harness.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["dsh-plugin", "deepseek-harness", "lsp", "refactor"],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -7,7 +7,7 @@ English | [中文](README.zh.md)
 
 **A batteries-included, daily-driver distribution of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
 
-DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, automatic reuse of your existing agent configuration, LSP navigation, stale-safe editing, notifications, usage reporting, and persistent code kernels.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, stale-safe editing, notifications, usage reporting, and persistent code kernels.
 
 It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
@@ -49,7 +49,7 @@ npx oh-my-dsh@latest
 
 Bundled language servers cover TypeScript/JavaScript, Python, JSON, HTML, CSS/SCSS/Less, and YAML. If installed on your PATH, `rust-analyzer`, `gopls`, `clangd`, and `sourcekit-lsp` are discovered automatically.
 
-The model receives upstream's read-only LSP operations for definitions, references, implementations, and hover.
+The model receives upstream's read-only LSP operations for definitions, references, implementations, and hover. `semantic_refactor` adds previewable symbol rename: the language server returns a multi-file edit, OMD validates every path and file version, shows an exact proposal, applies it after one approval, and requests diagnostics. Failed publication rolls back completed writes; an incomplete rollback leaves a private recovery journal.
 
 ### Reuse your existing agent setup
 
@@ -57,7 +57,7 @@ The model receives upstream's read-only LSP operations for definitions, referenc
 
 - Instructions from `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, always-on Cursor rules, Copilot instructions, and user-level Claude/Codex files.
 - Skills from project and user `.dsh`, `.agents`, `.claude`, `.cursor`, and `.codex` roots.
-- MCP servers from Claude, Cursor, and Codex JSON/TOML configuration.
+- MCP servers from Claude, Cursor, and Codex JSON/TOML configuration. Definitions stay inert until a session explicitly activates one.
 - Supported Claude Code and Codex command hooks.
 - Markdown commands from Claude, Cursor, and Codex command directories.
 
@@ -68,11 +68,23 @@ cd path/to/repository
 omd trust add .
 ```
 
-Review the repository first. Trusted integrations may start processes or consume credentials.
+Review the repository first. Trust makes project definitions discoverable; an MCP process still requires a separate activation proposal and approval.
+
+### Lazy MCP capability control
+
+Imported and preset MCP servers are catalogued without starting a process, expanding credentials, or injecting tool schemas. The model can search server names and previously cached non-secret tool metadata, then prepare an activation proposal. Only `proposal_control apply` starts that server for the current agent session.
+
+Useful controls:
+
+- `/omd-mcp [query]` lists inert and active servers without activating them.
+- `mcp_control` lists, searches, and prepares activation or deactivation.
+- `proposal_control` shows the command or URL path, arguments with credential values redacted, working directory, and source config before applying with user approval.
+- Deactivation disposes the upstream MCP fiber and removes its tools.
 
 ### Daily-use tools upstream does not prioritize
 
 - `hash_edit` performs stale-safe multi-line replacement using per-line anchors and a final filesystem version guard.
+- `semantic_refactor` prepares version-guarded, recoverable multi-file LSP rename transactions.
 - `kernel` provides session-persistent JavaScript and Python state, with callbacks into dsh tools.
 - An optional second-model advisor reviews completed top-level turns.
 - `/usage` reports the live session; `omd usage` aggregates persisted sessions.
@@ -89,7 +101,7 @@ omd doctor                       # inspect installation status
 omd config                       # print the final Cordis composition
 omd usage                        # aggregate saved-session token usage
 omd preset list                  # list curated MCP presets
-omd preset enable context7       # enable a preset; restart to apply
+omd preset enable context7       # add a preset to the inert MCP catalog
 omd trust add .                  # trust this repository's integrations
 omd dsh --help                   # invoke the underlying dsh CLI
 ```
@@ -133,11 +145,18 @@ It adds latency and another model call to each reviewed turn.
 
 Edit either profile's `cordis.patch.yml` for profile-specific changes. `omd setup` preserves these files. `$DSH_HOME/cordis.patch.yml` applies after every profile and therefore has the final word.
 
+### Proposal and recovery lifecycle
+
+Capability activation and source mutation use the same `prepare → inspect → approve → commit → verify` lifecycle. A proposal is session-local and cannot authorize itself; applying it always reaches the upstream approval service.
+
+Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/delete/rename operations, server-driven `workspace/applyEdit`, and `workspace/executeCommand` are rejected. Recovery journals live under `$DSH_HOME/omd/refactors/` with mode `0600` and are deleted after successful apply or rollback. They make interrupted work recoverable, but do not claim filesystem-wide crash atomicity.
+
 ## Security notes
 
-- `danger-full-access` is available but never the default.
+- `danger-full-access` is available but never the default. It still asks before committing a prepared proposal.
 - Project integrations are gated by `omd trust`.
-- Environment placeholders in trusted MCP configuration are expanded on the host and are never injected into prompts.
+- MCP definitions do not start, expand environment placeholders, or expose schemas during discovery. Expansion happens on the host only after an approved activation and values never enter prompts or metadata caches.
+- Semantic refactors reject edits outside the session workspace and recheck every observed file version before writing.
 - Glob-scoped Cursor rules are not applied globally when dsh cannot determine the active file.
 - Persistent kernels execute as your host user. They require approval by default and are not a sandbox.
 - Monetary cost is not estimated because dsh does not expose provider-neutral pricing.

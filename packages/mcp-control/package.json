@@ -1,0 +1,11 @@
+{
+  "name": "@oh-my-dsh/mcp-control",
+  "version": "0.1.0",
+  "description": "Session-scoped lazy MCP catalog and approval-gated activation for DeepSeek Harness.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["dsh-plugin", "deepseek-harness", "mcp", "lazy-loading"],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

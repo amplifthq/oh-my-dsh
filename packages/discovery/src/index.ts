@@ -30,13 +30,23 @@ import type {} from '@deepseek-ai/dsh-commands'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import * as ClaudeHooks from '@deepseek-ai/dsh-hooks-claude-code'
 import * as CodexHooks from '@deepseek-ai/dsh-hooks-codex'
-import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 import * as SkillFilesystem from '@deepseek-ai/dsh-skill-filesystem'
 import { load as parseYaml } from 'js-yaml'
 import { parse as parseToml } from 'smol-toml'
+import type {
+  McpControlRuntime,
+  McpServerDefinition,
+  McpServerSource,
+} from '../../mcp-control/src/index.ts'
 
 export const name = 'omd-discovery'
-export const inject = ['agents', 'skills', 'tools', 'commands', 'shell']
+export const inject = ['agents', 'skills', 'tools', 'commands', 'shell', 'mcpControl']
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    mcpControl: McpControlRuntime
+  }
+}
 
 export interface Config {
   instructions?: boolean
@@ -62,6 +72,7 @@ interface InstructionSource {
 }
 
 interface ForeignMcpServer {
+  configPath?: string
   command?: string
   args?: string[]
   env?: Record<string, string>
@@ -216,13 +227,7 @@ export function renderInstructions(
   ].join('\n')
 }
 
-function expandEnvironment(value: string): string {
-  return value
-    .replace(/\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name: string) => process.env[name] ?? '')
-    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name: string) => process.env[name] ?? '')
-}
-
-function normalizeServer(value: unknown): ForeignMcpServer | undefined {
+function normalizeServer(value: unknown, configPath?: string): ForeignMcpServer | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const raw = value as Record<string, unknown>
   const command = typeof raw.command === 'string' ? raw.command : undefined
@@ -233,10 +238,10 @@ function normalizeServer(value: unknown): ForeignMcpServer | undefined {
     return Object.fromEntries(
       Object.entries(input)
         .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-        .map(([key, val]) => [key, expandEnvironment(val)]),
     )
   }
   return {
+    configPath,
     command,
     url,
     args: Array.isArray(raw.args) ? raw.args.filter((item): item is string => typeof item === 'string') : undefined,
@@ -256,7 +261,7 @@ function jsonServers(path: string): Record<string, ForeignMcpServer> {
     if (!container || typeof container !== 'object' || Array.isArray(container)) return {}
     return Object.fromEntries(
       Object.entries(container)
-        .map(([key, value]) => [key, normalizeServer(value)] as const)
+        .map(([key, value]) => [key, normalizeServer(value, path)] as const)
         .filter((entry): entry is [string, ForeignMcpServer] => Boolean(entry[1])),
     )
   } catch {
@@ -273,7 +278,7 @@ function codexServers(path: string): Record<string, ForeignMcpServer> {
     if (!container || typeof container !== 'object' || Array.isArray(container)) return {}
     return Object.fromEntries(
       Object.entries(container)
-        .map(([key, value]) => [key, normalizeServer(value)] as const)
+        .map(([key, value]) => [key, normalizeServer(value, path)] as const)
         .filter((entry): entry is [string, ForeignMcpServer] => Boolean(entry[1])),
     )
   } catch {
@@ -348,6 +353,64 @@ function hasProjectMcpConfig(cwd: string): boolean {
 
 export function discoverMcpServers(cwd: string, home = homedir()): Record<string, ForeignMcpServer> {
   return { ...userMcpServers(home), ...projectMcpServers(cwd) }
+}
+
+function catalogDefinitions(
+  servers: Record<string, ForeignMcpServer>,
+  source: McpServerSource,
+  cwd: string,
+): McpServerDefinition[] {
+  const definitions: McpServerDefinition[] = []
+  for (const [serverName, server] of Object.entries(servers)) {
+    if (server.disabled) continue
+    if (server.command) {
+      definitions.push({
+        name: serverName,
+        source,
+        configPath: server.configPath,
+        transport: 'stdio',
+        command: server.command,
+        args: server.args,
+        env: server.env,
+        cwd: server.cwd ?? cwd,
+      })
+    } else if (server.url) {
+      definitions.push({
+        name: serverName,
+        source,
+        configPath: server.configPath,
+        transport: 'streamable-http',
+        url: server.url,
+        headers: server.headers,
+      })
+    }
+  }
+  return definitions
+}
+
+export function discoverMcpCatalog(
+  cwd: string,
+  home = homedir(),
+  trusted = isTrustedWorkspace(cwd, home),
+): McpServerDefinition[] {
+  const user = {
+    ...jsonServers(join(home, '.claude.json')),
+    ...jsonServers(join(home, '.cursor', 'mcp.json')),
+    ...codexServers(join(home, '.codex', 'config.toml')),
+  }
+  const byName = new Map<string, McpServerDefinition>()
+  for (const definition of catalogDefinitions(presetServers(home), 'preset', cwd)) {
+    byName.set(definition.name, definition)
+  }
+  for (const definition of catalogDefinitions(user, 'user', cwd)) {
+    byName.set(definition.name, definition)
+  }
+  if (trusted) {
+    for (const definition of catalogDefinitions(projectMcpServers(cwd), 'project', cwd)) {
+      byName.set(definition.name, definition)
+    }
+  }
+  return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
 export function normalizeMcpServerName(input: string): string {
@@ -481,42 +544,6 @@ export function isTrustedWorkspace(cwd: string, home: string): boolean {
   }
 }
 
-function mountMcp(
-  scope: Context,
-  servers: Record<string, ForeignMcpServer>,
-  cwd: string,
-  namespace: string,
-): PromiseLike<unknown>[] {
-  const fibers: PromiseLike<unknown>[] = []
-  for (const [rawName, server] of Object.entries(servers)) {
-    if (server.disabled) continue
-    const common = {
-      serverName: normalizeMcpServerName(`${namespace}-${rawName}`),
-      toolCallTimeoutMs: 60_000,
-      failOnStartupError: false,
-      reconnect: { enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 },
-    }
-    if (server.command) {
-      fibers.push(scope.plugin(McpClient, {
-        ...common,
-        transport: 'stdio',
-        command: server.command,
-        args: server.args ?? [],
-        env: server.env ?? {},
-        cwd: server.cwd ?? cwd,
-      }))
-    } else if (server.url) {
-      fibers.push(scope.plugin(McpClient, {
-        ...common,
-        transport: 'streamable-http',
-        url: server.url,
-        headers: server.headers ?? {},
-      }))
-    }
-  }
-  return fibers
-}
-
 function mountHooks(
   scope: Context,
   paths: { claude: string[]; codex: string[] },
@@ -626,7 +653,6 @@ export function apply(ctx: Context, config: Config): void {
       watch: true,
     })
   }
-  if (config.mcp !== false) mountMcp(ctx, userMcpServers(home), launchCwd, 'user')
   if (config.hooks !== false) mountHooks(ctx, userHookConfigPaths(home))
   if (config.commands !== false) registerCommands(ctx, userCommands(home), home, home)
 
@@ -662,6 +688,10 @@ export function apply(ctx: Context, config: Config): void {
     }
 
     const trusted = isTrustedWorkspace(workspace, home)
+    await agentCtx.mcpControl.configure(
+      agent,
+      config.mcp === false ? [] : discoverMcpCatalog(workspace, home, trusted),
+    )
     if (!trusted) {
       const projectHooks = projectHookConfigPaths(workspace)
       const hasExecutableConfig =
@@ -686,18 +716,6 @@ export function apply(ctx: Context, config: Config): void {
         customSkillDirs: projectSkillDirectories(workspace),
         watch: true,
       }))
-    }
-    const agentNamespace = `project-${createHash('sha256')
-      .update(String(agent.id))
-      .digest('hex')
-      .slice(0, 8)}`
-    if (config.mcp !== false) {
-      fibers.push(...mountMcp(
-        agentCtx,
-        projectMcpServers(workspace),
-        workspace,
-        agentNamespace,
-      ))
     }
     if (config.hooks !== false) {
       fibers.push(...mountHooks(agentCtx, projectHookConfigPaths(workspace)))

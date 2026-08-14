@@ -29,6 +29,14 @@ test('profile dependency uses a valid registry version outside a source checkout
   }), 'file:/workspace/oh-my-dsh')
 })
 
+test('danger-full-access still asks before committing reviewed proposals', () => {
+  const bundle = readFileSync(resolve('bundles/omd.cordis.yml'), 'utf8')
+  assert.match(
+    bundle,
+    /danger-full-access:\s*\n\s+sandbox: danger-full-access\s*\n\s+approval: ask/,
+  )
+})
+
 test('CLI help and curated preset configuration work without booting dsh', () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-cli-'))
   try {

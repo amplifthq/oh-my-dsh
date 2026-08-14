@@ -26,6 +26,9 @@
     "./usage": "./dist/packages/usage/src/index.js",
     "./kernel": "./dist/packages/kernel/src/index.js",
     "./lsp-auto": "./dist/packages/lsp-auto/src/index.js",
+    "./proposals": "./dist/packages/proposals/src/index.js",
+    "./mcp-control": "./dist/packages/mcp-control/src/index.js",
+    "./refactor": "./dist/packages/refactor/src/index.js",
     "./cordis.patch.yml": "./bundles/omd.cordis.yml",
     "./package.json": "./package.json"
   },

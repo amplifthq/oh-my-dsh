@@ -30,7 +30,7 @@
         approval: ask
       danger-full-access:
         sandbox: danger-full-access
-        approval: never
+        approval: ask
 
 - id: compaction-basic
   config:
@@ -68,6 +68,15 @@
 - insert:
     - id: omd-lsp
       name: '@deepseek-ai/dsh-lsp'
+
+    - id: omd-proposals
+      name: 'oh-my-dsh/proposals'
+
+    - id: omd-mcp-control
+      name: 'oh-my-dsh/mcp-control'
+
+    - id: omd-refactor
+      name: 'oh-my-dsh/refactor'
 
     - id: omd-lsp-auto
       name: 'oh-my-dsh/lsp-auto'

@@ -124,7 +124,13 @@ importers:
 
   packages/lsp-auto: {}
 
+  packages/mcp-control: {}
+
   packages/notify: {}
+
+  packages/proposals: {}
+
+  packages/refactor: {}
 
   packages/tool-time: {}
 

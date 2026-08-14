@@ -12,17 +12,23 @@ import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import type { Context } from '@deepseek-ai/cordis'
 import * as LspStdio from '@deepseek-ai/dsh-lsp-stdio'
+import type {
+  RefactorRuntime,
+  RefactorServerConfig,
+} from '../../refactor/src/index.ts'
 
 export const name = 'omd-lsp-auto'
-export const inject = ['lsp', 'fs', 'subprocess']
+export const inject = ['lsp', 'fs', 'subprocess', 'refactors']
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    refactors: RefactorRuntime
+  }
+}
 
 const require = createRequire(import.meta.url)
 
-interface ServerConfig {
-  command: string
-  args?: string[]
-  extensionToLanguage: Record<string, string>
-}
+export interface ServerConfig extends RefactorServerConfig {}
 
 function packageBin(packageName: string, binName: string): string | undefined {
   try {
@@ -125,8 +131,34 @@ export function discoverServers(): Record<string, ServerConfig> {
   return servers
 }
 
+interface RefactorServerRegistrar {
+  registerServer(id: string, config: RefactorServerConfig): () => void
+}
+
+export function registerRefactorServers(
+  refactors: RefactorServerRegistrar,
+  servers: Record<string, ServerConfig>,
+): () => void {
+  const disposers: Array<() => void> = []
+  try {
+    for (const [id, config] of Object.entries(servers)) {
+      disposers.push(refactors.registerServer(id, config))
+    }
+  } catch (error) {
+    for (const dispose of [...disposers].reverse()) dispose()
+    throw error
+  }
+  return () => {
+    for (const dispose of [...disposers].reverse()) dispose()
+  }
+}
+
 export function apply(ctx: Context): void {
   const servers = discoverServers()
   if (!Object.keys(servers).length) return
+  ctx.effect(
+    () => registerRefactorServers(ctx.refactors, servers),
+    'omd-lsp-auto.refactor-servers',
+  )
   ctx.plugin(LspStdio, { servers })
 }

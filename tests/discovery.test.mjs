@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import {
   discoverInstructions,
+  discoverMcpCatalog,
   discoverMcpServers,
   normalizeMcpServerName,
   renderInstructions,
@@ -43,7 +44,7 @@ test('discovers global and always-on Cursor instructions but skips scoped rules'
   }
 })
 
-test('imports project MCP definitions and expands environment placeholders', () => {
+test('imports project MCP definitions without expanding environment placeholders', () => {
   const { root, home, project } = fixture()
   const previous = process.env.OMD_TEST_TOKEN
   process.env.OMD_TEST_TOKEN = 'secret-value'
@@ -60,10 +61,40 @@ test('imports project MCP definitions and expands environment placeholders', () 
     const servers = discoverMcpServers(project, home)
     assert.equal(servers.docs.command, 'node')
     assert.deepEqual(servers.docs.args, ['server.js'])
-    assert.equal(servers.docs.env.TOKEN, 'secret-value')
+    assert.equal(servers.docs.env.TOKEN, '${env:OMD_TEST_TOKEN}')
+    assert.equal(servers.docs.configPath, join(project, '.mcp.json'))
   } finally {
     if (previous === undefined) delete process.env.OMD_TEST_TOKEN
     else process.env.OMD_TEST_TOKEN = previous
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('lazy MCP catalog excludes untrusted project servers and labels trusted sources', () => {
+  const { root, home, project } = fixture()
+  try {
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({
+      mcpServers: {
+        userDocs: { command: 'node', args: ['user.js'] },
+      },
+    }))
+    writeFileSync(join(project, '.mcp.json'), JSON.stringify({
+      mcpServers: {
+        projectDocs: { command: 'node', args: ['project.js'] },
+      },
+    }))
+
+    const untrusted = discoverMcpCatalog(project, home, false)
+    assert.deepEqual(untrusted.map((server) => server.name), ['userDocs'])
+    assert.equal(untrusted[0].source, 'user')
+    assert.equal(untrusted[0].configPath, join(home, '.claude.json'))
+
+    const trusted = discoverMcpCatalog(project, home, true)
+    assert.deepEqual(trusted.map((server) => server.name), ['projectDocs', 'userDocs'])
+    const projectServer = trusted.find((server) => server.name === 'projectDocs')
+    assert.equal(projectServer.source, 'project')
+    assert.equal(projectServer.configPath, join(project, '.mcp.json'))
+  } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
