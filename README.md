@@ -1,107 +1,125 @@
 # oh-my-dsh
 
+[![npm](https://img.shields.io/npm/v/oh-my-dsh?logo=npm)](https://www.npmjs.com/package/oh-my-dsh)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 English | [中文](README.zh.md)
 
-An opinionated, daily-driver distribution layer for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+**A batteries-included, daily-driver distribution of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
 
-It is not a fork. `oh-my-dsh` is a formal dsh profile plus a Cordis plugin bundle: upstream keeps its “everything is a plugin” architecture, while this package adds cross-tool discovery, code navigation, stale-safe editing, notifications, usage reporting, an optional advisor, and persistent code kernels.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, automatic reuse of your existing agent configuration, LSP navigation, stale-safe editing, notifications, usage reporting, and persistent code kernels.
 
-> DeepSeek Harness is still in developer preview. oh-my-dsh pins a compatible upstream version and validates upgrades deliberately.
+It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
-## Install
+> DeepSeek Harness is in developer preview. `oh-my-dsh` pins a tested upstream release instead of silently following breaking changes.
 
-Requires Node `^22.19 || >=24`.
+## Quick start
 
-After the package is published:
-
-```sh
-npx oh-my-dsh setup
-npx oh-my-dsh
-```
-
-Or install globally:
+Requires Node.js `^22.19.0` or `>=24.0.0`.
 
 ```sh
-npm install -g oh-my-dsh
+npm install --global oh-my-dsh
 omd setup
 omd
 ```
 
-From source:
+The first setup can take several minutes. It installs two isolated profiles under `~/.dsh/profiles/`:
+
+- `omd` — interactive Web UI.
+- `omd-headless` — one-shot terminal tasks.
+
+Prefer not to install globally?
 
 ```sh
-git clone https://github.com/amplifthq/oh-my-dsh.git
-cd oh-my-dsh
-pnpm install
-pnpm build
-./bin/omd setup
-./bin/omd
+npx oh-my-dsh@latest setup
+npx oh-my-dsh@latest
 ```
 
-`setup` creates two formal profiles under `$DSH_HOME/profiles/` (normally `~/.dsh/profiles/`):
+## What you get
 
-- `omd` for the Web UI.
-- `omd-headless` for one-shot tasks.
+### A coding profile that is useful immediately
 
-Put personal overrides in each profile's `cordis.patch.yml`; later `omd setup` upgrades preserve that file.
+- `workspace-write + ask` permissions: productive by default without silently granting full host access.
+- Native tools and upstream Code Mode available together.
+- Explicit compaction, timeout, instruction-budget, and coding-persona defaults.
+- Zoned time context and desktop notifications for approvals and long-running turns.
+- Upstream multi-provider support through the Web Models page.
+
+### Code intelligence
+
+Bundled language servers cover TypeScript/JavaScript, Python, JSON, HTML, CSS/SCSS/Less, and YAML. If installed on your PATH, `rust-analyzer`, `gopls`, `clangd`, and `sourcekit-lsp` are discovered automatically.
+
+The model receives upstream's read-only LSP operations for definitions, references, implementations, and hover.
+
+### Reuse your existing agent setup
+
+`oh-my-dsh` reads compatible configuration in place; it does not copy or rewrite it:
+
+- Instructions from `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, always-on Cursor rules, Copilot instructions, and user-level Claude/Codex files.
+- Skills from project and user `.dsh`, `.agents`, `.claude`, `.cursor`, and `.codex` roots.
+- MCP servers from Claude, Cursor, and Codex JSON/TOML configuration.
+- Supported Claude Code and Codex command hooks.
+- Markdown commands from Claude, Cursor, and Codex command directories.
+
+Project MCP, hooks, and imported skills are disabled until you explicitly trust the Git root:
+
+```sh
+cd path/to/repository
+omd trust add .
+```
+
+Review the repository first. Trusted integrations may start processes or consume credentials.
+
+### Daily-use tools upstream does not prioritize
+
+- `hash_edit` performs stale-safe multi-line replacement using per-line anchors and a final filesystem version guard.
+- `kernel` provides session-persistent JavaScript and Python state, with callbacks into dsh tools.
+- An optional second-model advisor reviews completed top-level turns.
+- `/usage` reports the live session; `omd usage` aggregates persisted sessions.
+- Curated, opt-in MCP presets: `memory`, `context7`, and `playwright`.
+- Bundled skills: `review-changes`, `systematic-debugging`, and `verify-before-done`.
 
 ## Commands
 
 ```sh
 omd                              # start the Web UI
 omd headless "fix the tests"     # run one task and exit
-omd config                       # print the final composition
+omd setup                        # install or upgrade both profiles
 omd doctor                       # inspect installation status
-omd usage                        # sum token usage from saved sessions
+omd config                       # print the final Cordis composition
+omd usage                        # aggregate saved-session token usage
 omd preset list                  # list curated MCP presets
 omd preset enable context7       # enable a preset; restart to apply
-omd trust add .                  # trust this repo's imported integrations
+omd trust add .                  # trust this repository's integrations
 omd dsh --help                   # invoke the underlying dsh CLI
 ```
 
-## Layer 1: a daily-driver distribution
+## Configuration
 
-The profile defaults to `workspace-write + ask`, exposes both native tools and upstream Code Mode, uses explicit compaction and timeout policies, enables time context, and supplies a coding persona centered on small changes, preservation of user work, and evidence before completion.
+### Models
 
-Upstream's dormant `llm-pi-ai` adapter remains available through the Web Models page for OpenAI, Anthropic, Google, OpenRouter, and compatible gateways.
+Configure DeepSeek or upstream's multi-provider adapter in the Web Models page. The latter supports OpenAI, Anthropic, Google, OpenRouter, and compatible gateways.
 
-### LSP included
+### Search and fetch
 
-TypeScript/JavaScript, Python, JSON, HTML, CSS/SCSS/Less, and YAML language servers are bundled. `rust-analyzer`, `gopls`, `clangd`, and `sourcekit-lsp` are added when found on PATH.
+Search selection follows:
 
-The model gets upstream's read-only `lsp` tool for definitions, references, implementations, and hover.
+1. `DSH_WEB_SEARCH_PROVIDER`
+2. Exa when `EXA_API_KEY` is present
+3. Perplexity when `PERPLEXITY_API_KEY` is present
+4. DeepSeek search
 
-### Cross-tool discovery
+HTTP fetch is off by default because upstream rc.6 does not yet provide complete private-network/SSRF protection:
 
-Existing files are read in place and never rewritten:
+```sh
+OMD_ENABLE_WEB_FETCH=1 omd
+```
 
-- Instructions: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, global Claude/Codex instructions, `.cursorrules`, always-on `.cursor/rules/*.mdc`, and Copilot instructions.
-- Skills: project and user `.dsh`, `.agents`, `.claude`, `.cursor`, and `.codex` skill roots.
-- MCP: user and project Claude, Cursor, and Codex configurations. `${env:NAME}` expands only in host configuration and never enters prompts.
-- Hooks: the command-hook subset supported by upstream's Claude Code and Codex bridges.
-- Commands: Markdown commands from `.claude/commands`, `.cursor/commands`, and `.codex/prompts` become dsh slash commands; native dsh commands win collisions.
+Enable it only when you accept that risk.
 
-Scoped Cursor rules with globs are not injected globally because dsh does not currently expose a current-file scope. Applying them everywhere would be incorrect.
+### Advisor
 
-Project MCP, hooks, and cross-tool skills can start processes or indirectly consume credentials, so they are skipped by default. Run `omd trust add <path>` only after reviewing the repository. Trust is persisted by Git root, and Web sessions discover project integrations from their own workspace. User-home configuration remains user-managed.
-
-### Web search and fetch
-
-Search selects `DSH_WEB_SEARCH_PROVIDER`, then Exa when `EXA_API_KEY` exists, Perplexity when `PERPLEXITY_API_KEY` exists, and finally DeepSeek search.
-
-Upstream rc.6's HTTP fetch provider does not yet provide complete private-network/SSRF protection, so fetch is off by default. Set `OMD_ENABLE_WEB_FETCH=1` only when you explicitly accept that risk.
-
-## Layer 2: daily-use gaps
-
-- `hash_edit` reads `line:hash|text` anchors and requires every `expected_anchors` entry in an inclusive replacement range. Any changed interior or boundary line produces a stale-anchor error before the version-guarded write.
-- The optional advisor reviews each completed top-level turn with a second provider/model and injects only actionable concerns into the next step.
-- Desktop notifications fire for approval requests and turns longer than 15 seconds.
-- `/usage` reports the current session; `omd usage` aggregates saved sessions. Monetary cost is explicitly unavailable because dsh has no provider-neutral pricing contract.
-- `kernel` provides session-persistent JavaScript (`state`) and Python globals. Cells can call dsh tools with `await tool(name, args)` or `tool(name, args)`. Kernel calls require approval by default and are not a security sandbox.
-- Optional MCP presets: `memory`, `context7`, and `playwright`.
-- Bundled skills: `review-changes`, `systematic-debugging`, and `verify-before-done`.
-
-Enable the advisor with:
+The advisor is disabled until both values are configured:
 
 ```sh
 export OMD_ADVISOR_PROVIDER=anthropic
@@ -109,9 +127,24 @@ export OMD_ADVISOR_MODEL=claude-sonnet-4-5
 omd
 ```
 
-## Architecture and development
+It adds latency and another model call to each reviewed turn.
 
-The bundle is [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml); plugins live in `packages/*`. The published package exposes a formal `dsh.bundle.patch`. Composition order is:
+### Local overrides
+
+Edit either profile's `cordis.patch.yml` for profile-specific changes. `omd setup` preserves these files. `$DSH_HOME/cordis.patch.yml` applies after every profile and therefore has the final word.
+
+## Security notes
+
+- `danger-full-access` is available but never the default.
+- Project integrations are gated by `omd trust`.
+- Environment placeholders in trusted MCP configuration are expanded on the host and are never injected into prompts.
+- Glob-scoped Cursor rules are not applied globally when dsh cannot determine the active file.
+- Persistent kernels execute as your host user. They require approval by default and are not a sandbox.
+- Monetary cost is not estimated because dsh does not expose provider-neutral pricing.
+
+## Architecture
+
+The published package is a formal dsh bundle. Its composition order is:
 
 ```text
 @deepseek-ai/dsh-base
@@ -121,12 +154,18 @@ The bundle is [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml); plugins live i
 → $DSH_HOME/cordis.patch.yml
 ```
 
-Local verification:
+The bundle lives in [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml); individual plugins live under [`packages/`](packages/).
+
+## Development
 
 ```sh
+git clone https://github.com/amplifthq/oh-my-dsh.git
+cd oh-my-dsh
+pnpm install
 pnpm typecheck
 pnpm test
-./bin/omd config
+./bin/omd setup
+./bin/omd
 ```
 
 ## License
