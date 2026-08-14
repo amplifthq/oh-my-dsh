@@ -1,0 +1,91 @@
+{
+  "name": "oh-my-dsh",
+  "version": "0.1.0",
+  "description": "Plugins, sensible defaults, and a launcher for DeepSeek Harness (dsh) — everything you're missing, without forking upstream.",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amplifthq/oh-my-dsh.git"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "bin": {
+    "omd": "./bin/omd"
+  },
+  "exports": {
+    ".": "./dist/src/index.js",
+    "./banner": "./dist/packages/banner/src/index.js",
+    "./discovery": "./dist/packages/discovery/src/index.js",
+    "./editor": "./dist/packages/editor/src/index.js",
+    "./advisor": "./dist/packages/advisor/src/index.js",
+    "./notify": "./dist/packages/notify/src/index.js",
+    "./tool-time": "./dist/packages/tool-time/src/index.js",
+    "./usage": "./dist/packages/usage/src/index.js",
+    "./kernel": "./dist/packages/kernel/src/index.js",
+    "./lsp-auto": "./dist/packages/lsp-auto/src/index.js",
+    "./cordis.patch.yml": "./bundles/omd.cordis.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "bundles",
+    "dist",
+    "presets",
+    "README.md",
+    "README.zh.md",
+    "LICENSE",
+    "install.sh"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./bundles/omd.cordis.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-agent": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-commands": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-hooks-claude-code": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-hooks-codex": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-lsp": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-lsp-stdio": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-mcp-client": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-scope": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-skill-filesystem": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-token-meter": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-lsp": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-user-approval": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-fetch-http": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-search-exa": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-search-perplexity": "0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "js-yaml": "^4.2.0",
+    "pyright": "^1.1.412",
+    "smol-toml": "^1.7.1",
+    "typescript": "^7.0.2",
+    "typescript-language-server": "^5.3.0",
+    "vscode-langservers-extracted": "^4.10.0",
+    "yaml-language-server": "^1.24.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.0"
+  }
+}

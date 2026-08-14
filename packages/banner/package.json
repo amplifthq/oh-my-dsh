@@ -1,0 +1,11 @@
+{
+  "name": "@oh-my-dsh/banner",
+  "version": "0.1.0",
+  "description": "Boot banner for oh-my-dsh compositions.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["dsh-plugin", "deepseek-harness", "oh-my-dsh"],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

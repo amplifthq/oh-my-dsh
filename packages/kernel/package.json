@@ -1,0 +1,11 @@
+{
+  "name": "@oh-my-dsh/kernel",
+  "version": "0.1.0",
+  "description": "Session-persistent JavaScript and Python kernels with dsh tool callbacks.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["dsh-plugin", "deepseek-harness", "python", "javascript", "kernel"],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

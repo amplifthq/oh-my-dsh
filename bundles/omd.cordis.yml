@@ -1,0 +1,133 @@
+# oh-my-dsh's opinionated coding layer. Profiles compose this after
+# @deepseek-ai/dsh-base and their mode bundle, so these complete row configs
+# intentionally replace the conservative upstream defaults.
+
+- id: system-prompt
+  config:
+    includeHarnessIdentity: true
+    includeRuntimeContext: true
+    persona: >-
+      You are a pragmatic software-engineering agent powered by {{model}}, working in {{cwd}}.
+      Inspect before editing, prefer the smallest correct change, preserve user work, and verify
+      behavior with the narrowest relevant checks before claiming completion. Use semantic code
+      navigation when text search is ambiguous. Keep the user informed only when progress,
+      assumptions, or blockers materially change.
+
+- id: tools
+  config:
+    mode: both
+    maxParallelSubCalls: 10
+
+- id: permission
+  config:
+    defaultPreset: workspace-write
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.78
+    retainRatio: 0.2
+    maxTokens: 8192
+    compactionRetries: 1
+    maxOverflowRetries: 1
+    auto: true
+
+- id: agent-instructions
+  config:
+    maxBytes: 98304
+    maxSourceBytes: 1048576
+    instructionFileCandidates:
+      - AGENTS.md
+      - CLAUDE.md
+      - GEMINI.md
+    localInstructionFileCandidates:
+      - AGENTS.local.md
+      - CLAUDE.local.md
+
+# Prefer a configured third-party search provider, then DeepSeek's provider.
+- id: web
+  config:
+    searchProvider: !!js "process.env.DSH_WEB_SEARCH_PROVIDER ?? (process.env.EXA_API_KEY ? 'exa' : (process.env.PERPLEXITY_API_KEY ? 'perplexity' : 'deepseek-official'))"
+    fetchProvider: http
+
+- id: tool-web
+  config:
+    fetch: !!js "process.env.OMD_ENABLE_WEB_FETCH === '1'"
+    searchTimeoutMs: 60000
+    fetchTimeoutMs: 60000
+
+- insert:
+    - id: omd-lsp
+      name: '@deepseek-ai/dsh-lsp'
+
+    - id: omd-lsp-auto
+      name: 'oh-my-dsh/lsp-auto'
+
+    - id: omd-tool-lsp
+      name: '@deepseek-ai/dsh-tool-lsp'
+      config:
+        maxLocations: 100
+        maxResultChars: 16000
+        timeoutMs: 60000
+
+    - id: omd-banner
+      name: 'oh-my-dsh/banner'
+
+    - id: omd-discovery
+      name: 'oh-my-dsh/discovery'
+
+    - id: omd-editor
+      name: 'oh-my-dsh/editor'
+
+    - id: omd-advisor
+      name: 'oh-my-dsh/advisor'
+      config:
+        enabled: !!js Boolean(process.env.OMD_ADVISOR_PROVIDER && process.env.OMD_ADVISOR_MODEL)
+        provider: !!js process.env.OMD_ADVISOR_PROVIDER ?? ''
+        model: !!js process.env.OMD_ADVISOR_MODEL ?? ''
+
+    - id: omd-tool-time
+      name: 'oh-my-dsh/tool-time'
+
+    - id: omd-notify
+      name: 'oh-my-dsh/notify'
+      config:
+        minRunMs: 15000
+        title: oh-my-dsh
+        notifyApproval: true
+
+    - id: omd-usage
+      name: 'oh-my-dsh/usage'
+
+    - id: omd-kernel
+      name: 'oh-my-dsh/kernel'
+
+    # Upstream opt-in: durable zoned time and elapsed time in model steps.
+    - id: omd-time-context
+      name: '@deepseek-ai/dsh-time-context'
+      config:
+        refreshIntervalMs: 60000
+
+    # Optional search providers become active only when their key is present.
+    - id: omd-web-search-exa
+      name: '@deepseek-ai/dsh-web-search-exa'
+      config:
+        apiKey: !!js process.env.EXA_API_KEY
+
+    - id: omd-web-search-perplexity
+      name: '@deepseek-ai/dsh-web-search-perplexity'
+      config:
+        apiKey: !!js process.env.PERPLEXITY_API_KEY
+
+    - id: omd-web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+      disabled: !!js "process.env.OMD_ENABLE_WEB_FETCH !== '1'"

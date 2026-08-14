@@ -1,0 +1,453 @@
+#!/usr/bin/env node
+
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { zstdDecompressSync } from 'node:zlib'
+
+const require = createRequire(import.meta.url)
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+const dshHome = resolve(process.env.DSH_HOME || join(homedir(), '.dsh'))
+const omdConfigPath = join(dshHome, 'omd.json')
+const presetCatalog = {
+  memory: 'Local persistent knowledge graph via MCP Reference Memory',
+  context7: 'Current library documentation through Context7 MCP',
+  playwright: 'Browser automation through Playwright MCP',
+}
+
+const profiles = {
+  omd: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'oh-my-dsh'],
+  'omd-headless': ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', 'oh-my-dsh'],
+}
+const profilePluginDependencies = [
+  '@deepseek-ai/dsh-lsp',
+  '@deepseek-ai/dsh-tool-lsp',
+  '@deepseek-ai/dsh-web-fetch-http',
+  '@deepseek-ai/dsh-web-search-exa',
+  '@deepseek-ai/dsh-web-search-perplexity',
+]
+
+function fail(message, code = 1) {
+  console.error(`omd: ${message}`)
+  process.exit(code)
+}
+
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd || process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  })
+  if (result.error) fail(`${command} failed: ${result.error.message}`)
+  return result.status ?? 1
+}
+
+function sourceCheckout() {
+  return existsSync(join(packageRoot, '.git'))
+}
+
+function packageSpec() {
+  return sourceCheckout() ? `file:${packageRoot}` : `oh-my-dsh@${manifest.version}`
+}
+
+function writeProfile(name, bundles) {
+  const directory = join(dshHome, 'profiles', name)
+  mkdirSync(directory, { recursive: true })
+
+  const packagePath = join(directory, 'package.json')
+  let current = {}
+  if (existsSync(packagePath)) {
+    try {
+      current = JSON.parse(readFileSync(packagePath, 'utf8'))
+    } catch (error) {
+      fail(`cannot parse ${packagePath}: ${error.message}`)
+    }
+  }
+
+  const next = {
+    ...current,
+    name: `dsh-profile-${name}`,
+    private: true,
+    type: 'module',
+    dependencies: {
+      ...(current.dependencies || {}),
+      'oh-my-dsh': packageSpec(),
+      ...Object.fromEntries(
+        profilePluginDependencies.map((dependency) => [dependency, manifest.dependencies[dependency]]),
+      ),
+    },
+    dsh: {
+      ...(current.dsh || {}),
+      profile: {
+        ...(current.dsh?.profile || {}),
+        bundles,
+      },
+    },
+  }
+  writeFileSync(packagePath, `${JSON.stringify(next, null, 2)}\n`)
+
+  const patchPath = join(directory, 'cordis.patch.yml')
+  if (!existsSync(patchPath)) {
+    writeFileSync(
+      patchPath,
+      [
+        '# Your local overrides for the oh-my-dsh profile.',
+        '# This file is preserved across `omd setup` upgrades.',
+        '[]',
+        '',
+      ].join('\n'),
+    )
+  }
+
+  console.log(`omd: installing profile ${name}...`)
+  const status = run(
+    process.env.OMD_NPM || 'npm',
+    ['install', '--omit=dev', '--no-audit', '--no-fund'],
+    { cwd: directory },
+  )
+  if (status !== 0) fail(`profile ${name} dependency installation failed`, status)
+}
+
+function ensureBuilt() {
+  if (!sourceCheckout()) return
+  console.log('omd: installing and building the source checkout...')
+  const packageManager = process.env.OMD_PACKAGE_MANAGER || 'pnpm'
+  let status = run(packageManager, ['install'], { cwd: packageRoot })
+  if (status !== 0) fail('dependency installation failed', status)
+  status = run(packageManager, ['run', 'build'], { cwd: packageRoot })
+  if (status !== 0) fail('build failed', status)
+}
+
+function setup() {
+  ensureBuilt()
+  for (const [name, bundles] of Object.entries(profiles)) writeProfile(name, bundles)
+  console.log(`omd: profiles installed under ${join(dshHome, 'profiles')}`)
+}
+
+function profileReady(name) {
+  return existsSync(join(dshHome, 'profiles', name, 'node_modules', 'oh-my-dsh'))
+}
+
+function ensureProfile(name) {
+  if (!profileReady(name)) {
+    console.log(`omd: profile ${name} is not installed; setting it up now.`)
+    setup()
+  }
+}
+
+function dshBin() {
+  if (process.env.OMD_DSH) {
+    const candidate = resolve(process.env.OMD_DSH, 'apps', 'cli', 'src', 'bin.ts')
+    if (!existsSync(candidate)) fail(`OMD_DSH is not a DeepSeek Harness checkout: ${process.env.OMD_DSH}`)
+    return { command: process.env.OMD_PNPM || 'pnpm', prefix: ['-C', resolve(process.env.OMD_DSH), 'dsh'] }
+  }
+  const packagePath = require.resolve('@deepseek-ai/dsh/package.json')
+  return {
+    command: process.execPath,
+    prefix: [join(dirname(packagePath), 'lib', 'bin.js')],
+  }
+}
+
+function runDsh(profile, args) {
+  ensureProfile(profile)
+  const dsh = dshBin()
+  const status = run(dsh.command, [...dsh.prefix, '--profile', profile, ...args])
+  process.exit(status)
+}
+
+function doctor() {
+  console.log(`oh-my-dsh ${manifest.version}`)
+  console.log(`Node: ${process.version}`)
+  console.log(`DSH_HOME: ${dshHome}`)
+  for (const name of Object.keys(profiles)) {
+    console.log(`${name}: ${profileReady(name) ? 'installed' : 'missing'}`)
+  }
+  try {
+    console.log(`dsh: ${require('@deepseek-ai/dsh/package.json').version}`)
+  } catch {
+    console.log('dsh: missing')
+  }
+}
+
+function readOmdConfig() {
+  if (!existsSync(omdConfigPath)) return { presets: [] }
+  try {
+    const value = JSON.parse(readFileSync(omdConfigPath, 'utf8'))
+    return {
+      ...value,
+      presets: Array.isArray(value.presets)
+        ? value.presets.filter((item) => typeof item === 'string')
+        : [],
+    }
+  } catch (error) {
+    fail(`cannot parse ${omdConfigPath}: ${error.message}`)
+  }
+}
+
+function writeOmdConfig(config) {
+  mkdirSync(dirname(omdConfigPath), { recursive: true })
+  writeFileSync(omdConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
+}
+
+function workspaceRoot(path) {
+  let current = resolve(path)
+  while (true) {
+    if (existsSync(join(current, '.git'))) return current
+    const parent = dirname(current)
+    if (parent === current) return resolve(path)
+    current = parent
+  }
+}
+
+function preset(args) {
+  const [action = 'list', name] = args
+  const config = readOmdConfig()
+  if (action === 'list') {
+    for (const [id, description] of Object.entries(presetCatalog)) {
+      console.log(`${config.presets.includes(id) ? '✓' : '○'} ${id.padEnd(12)} ${description}`)
+    }
+    return
+  }
+  if (!['enable', 'disable'].includes(action) || !name) {
+    fail('usage: omd preset [list | enable <name> | disable <name>]', 2)
+  }
+  if (!(name in presetCatalog)) fail(`unknown preset "${name}"`, 2)
+  const selected = new Set(config.presets)
+  if (action === 'enable') selected.add(name)
+  else selected.delete(name)
+  writeOmdConfig({ ...config, presets: [...selected].sort() })
+  console.log(`omd: ${name} ${action === 'enable' ? 'enabled' : 'disabled'}; restart omd to apply.`)
+}
+
+function trust(args) {
+  const [action = 'list', path = process.cwd()] = args
+  const config = readOmdConfig()
+  const trusted = new Set(
+    Array.isArray(config.trustedWorkspaces)
+      ? config.trustedWorkspaces.filter((item) => typeof item === 'string').map((item) => resolve(item))
+      : [],
+  )
+  if (action === 'list') {
+    if (!trusted.size) {
+      console.log('No trusted workspaces.')
+      return
+    }
+    for (const workspace of [...trusted].sort()) console.log(workspace)
+    return
+  }
+  if (!['add', 'remove'].includes(action)) {
+    fail('usage: omd trust [list | add [path] | remove [path]]', 2)
+  }
+  const workspace = workspaceRoot(path)
+  if (action === 'add') trusted.add(workspace)
+  else trusted.delete(workspace)
+  writeOmdConfig({ ...config, trustedWorkspaces: [...trusted].sort() })
+  console.log(`omd: ${workspace} ${action === 'add' ? 'trusted' : 'untrusted'}; restart omd to apply.`)
+}
+
+function zstdFrameRanges(bytes) {
+  const magic = 0xfd2fb528
+  const frames = []
+  let offset = 0
+  while (offset < bytes.length) {
+    const start = offset
+    if (bytes.length - offset < 4) break
+    if (bytes.readUInt32LE(offset) !== magic) {
+      throw new Error(`invalid Zstandard frame magic at byte ${offset}`)
+    }
+    offset += 4
+    if (offset === bytes.length) break
+    const descriptor = bytes.readUInt8(offset++)
+    if ((descriptor & 0x18) !== 0) {
+      throw new Error(`invalid Zstandard frame descriptor at byte ${offset - 1}`)
+    }
+    const contentSizeFlag = descriptor >>> 6
+    const singleSegment = (descriptor & 0x20) !== 0
+    const checksum = (descriptor & 0x04) !== 0
+    const dictionaryFlag = descriptor & 0x03
+    const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag
+    const contentSizeBytes = contentSizeFlag === 0
+      ? (singleSegment ? 1 : 0)
+      : 1 << contentSizeFlag
+    const remainingHeaderBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes
+    if (bytes.length - offset < remainingHeaderBytes) break
+    offset += remainingHeaderBytes
+    let complete = false
+    for (;;) {
+      if (bytes.length - offset < 3) break
+      const blockHeader = bytes.readUIntLE(offset, 3)
+      offset += 3
+      const lastBlock = (blockHeader & 1) !== 0
+      const blockType = (blockHeader >>> 1) & 3
+      if (blockType === 3) throw new Error(`reserved Zstandard block type at byte ${offset - 3}`)
+      const blockSize = blockHeader >>> 3
+      const payloadBytes = blockType === 1 ? 1 : blockSize
+      if (bytes.length - offset < payloadBytes) break
+      offset += payloadBytes
+      if (!lastBlock) continue
+      if (checksum) {
+        if (bytes.length - offset < 4) break
+        offset += 4
+      }
+      complete = true
+      break
+    }
+    if (!complete) break
+    frames.push({ start, end: offset })
+  }
+  return frames
+}
+
+function decompressZstd(bytes) {
+  const frames = zstdFrameRanges(bytes)
+  if (!frames.length) throw new Error('empty or incomplete Zstandard session log')
+  return Buffer.concat(
+    frames.map(({ start, end }) => zstdDecompressSync(bytes.subarray(start, end))),
+  )
+}
+
+async function usageReport() {
+  const root = join(dshHome, 'sessions')
+  const files = []
+  const walk = (directory) => {
+    if (!existsSync(directory)) return
+    for (const entry of readdirSync(directory)) {
+      const path = join(directory, entry)
+      let info
+      try { info = statSync(path) } catch { continue }
+      if (info.isDirectory()) walk(path)
+      else if (info.isFile() && (path.endsWith('.jsonl') || path.endsWith('.jsonl.zstd'))) {
+        files.push(path)
+      }
+    }
+  }
+  walk(root)
+  const total = {
+    sessions: files.length,
+    calls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+  }
+  const { decodeStorageRecord } = await import('@deepseek-ai/dsh-session')
+  for (const file of files) {
+    const usages = new Map()
+    let content
+    try {
+      const bytes = readFileSync(file)
+      content = file.endsWith('.zstd')
+        ? decompressZstd(bytes).toString('utf8')
+        : bytes.toString('utf8')
+    } catch {
+      continue
+    }
+    for (const line of content.split('\n').slice(1)) {
+      if (!line) continue
+      try {
+        const record = JSON.parse(line)
+        for (const event of decodeStorageRecord(record)) {
+          const key = `${event.data?.turn}:${event.data?.step}`
+          if (event.type === 'assistant/chunk' && event.data?.chunk?.type === 'usage') {
+            usages.set(key, event.data.chunk.usage)
+          } else if (event.type === 'assistant/message' && event.data?.usage) {
+            usages.set(key, event.data.usage)
+          }
+        }
+      } catch {
+        // A malformed line belongs to persistence diagnostics; usage remains
+        // best-effort and never mutates session data.
+      }
+    }
+    for (const usage of usages.values()) {
+      total.calls += 1
+      total.inputTokens += usage.inputTokens || 0
+      total.outputTokens += usage.outputTokens || 0
+      total.cacheReadTokens += usage.cacheReadTokens || 0
+      total.cacheWriteTokens += usage.cacheWriteTokens || 0
+      total.reasoningTokens += usage.reasoningTokens || 0
+    }
+  }
+  const format = new Intl.NumberFormat('en-US')
+  console.log(`Saved sessions: ${format.format(total.sessions)}`)
+  console.log(`Model calls: ${format.format(total.calls)}`)
+  console.log(`Input tokens: ${format.format(total.inputTokens)}`)
+  console.log(`Output tokens: ${format.format(total.outputTokens)}`)
+  console.log(`Reasoning tokens: ${format.format(total.reasoningTokens)}`)
+  console.log(`Cache read: ${format.format(total.cacheReadTokens)}`)
+  console.log(`Cache write: ${format.format(total.cacheWriteTokens)}`)
+  console.log('Estimated cost: unavailable (dsh adapters do not expose provider-neutral pricing).')
+}
+
+function usage() {
+  console.log(`oh-my-dsh ${manifest.version} — an opinionated DeepSeek Harness distribution
+
+Usage:
+  omd                         Start the Web UI with the omd profile
+  omd setup                   Install or upgrade the omd profiles
+  omd web [options]           Start the Web UI
+  omd headless "task"         Run one headless task
+  omd config                  Print the composed omd Web configuration
+  omd doctor                  Check installation and profile status
+  omd preset [list|enable|disable]
+                              Manage curated MCP presets
+  omd trust [list|add|remove] Manage workspaces allowed to run imported integrations
+  omd usage                   Sum token usage from saved sessions
+  omd dsh [arguments...]      Invoke the underlying dsh CLI directly
+
+Environment:
+  DSH_HOME                    Harness home (default: ~/.dsh)
+  OMD_DSH                     Optional DeepSeek Harness source checkout
+  OMD_NPM / OMD_PNPM          Package-manager command overrides
+  OMD_PACKAGE_MANAGER         Source-checkout package manager (default: pnpm)
+`)
+}
+
+const [command = 'web', ...args] = process.argv.slice(2)
+switch (command) {
+  case 'setup':
+    setup()
+    break
+  case 'web':
+    runDsh('omd', args)
+    break
+  case 'headless':
+    runDsh('omd-headless', args)
+    break
+  case 'config':
+    runDsh('omd', ['--dump-config', ...args])
+    break
+  case 'doctor':
+    doctor()
+    break
+  case 'preset':
+    preset(args)
+    break
+  case 'trust':
+    trust(args)
+    break
+  case 'usage':
+    await usageReport()
+    break
+  case 'dsh': {
+    const dsh = dshBin()
+    process.exit(run(dsh.command, [...dsh.prefix, ...args]))
+  }
+  case 'help':
+  case '--help':
+  case '-h':
+    usage()
+    break
+  case '--version':
+  case '-v':
+    console.log(manifest.version)
+    break
+  default:
+    fail(`unknown command "${command}" (run "omd help")`, 2)
+}
