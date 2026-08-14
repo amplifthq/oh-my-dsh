@@ -23,7 +23,6 @@
     "./advisor": "./dist/packages/advisor/src/index.js",
     "./debug": "./dist/packages/debug/src/index.js",
     "./notify": "./dist/packages/notify/src/index.js",
-    "./tool-time": "./dist/packages/tool-time/src/index.js",
     "./usage": "./dist/packages/usage/src/index.js",
     "./kernel": "./dist/packages/kernel/src/index.js",
     "./lsp-auto": "./dist/packages/lsp-auto/src/index.js",

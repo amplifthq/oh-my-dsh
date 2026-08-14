@@ -111,9 +111,6 @@
         provider: !!js process.env.OMD_ADVISOR_PROVIDER ?? ''
         model: !!js process.env.OMD_ADVISOR_MODEL ?? ''
 
-    - id: omd-tool-time
-      name: 'oh-my-dsh/tool-time'
-
     - id: omd-notify
       name: 'oh-my-dsh/notify'
       config:
