@@ -83,11 +83,13 @@ Useful controls:
 
 ### Daily-use tools upstream does not prioritize
 
+- `@file` mentions: reference workspace files in your message as `@path`, `@path:12-40`, or `@"path with spaces"`. The mentioned content is attached to the same model step, bounded in size, and rendered as `hash_edit`-compatible anchors. Parsing is text-only (no composer autocomplete); files outside the workspace are never attached.
 - `hash_edit` performs stale-safe multi-line replacement using per-line anchors and a final filesystem version guard.
 - `semantic_refactor` prepares version-guarded, recoverable multi-file LSP rename transactions.
 - `kernel` provides session-persistent JavaScript and Python state, with callbacks into dsh tools.
 - An optional second-model advisor reviews completed top-level turns.
 - `/usage` reports the live session; `omd usage` aggregates persisted sessions.
+- Opt-in DAP debugging: `debug_control` prepares launch and attach proposals for `debugpy`, `lldb-dap`, or custom stdio adapters; only an approved apply starts the adapter and debuggee.
 - Curated, opt-in MCP presets: `memory`, `context7`, and `playwright`.
 - Bundled skills: `review-changes`, `systematic-debugging`, and `verify-before-done`.
 
@@ -140,6 +142,16 @@ omd
 ```
 
 It adds latency and another model call to each reviewed turn.
+
+### Debugging
+
+Debug Adapter Protocol support is off by default:
+
+```sh
+OMD_ENABLE_DEBUG=1 omd
+```
+
+`debug_control adapters` lists what was discovered: `debugpy` (when importable by `python3`/`python`), `lldb-dap` (when on PATH), plus custom stdio adapters from plugin configuration. Launching or attaching always returns a proposal; only `proposal_control apply` with user approval spawns the adapter and debuggee. An approved session supports breakpoints, stepping, stack and variable inspection, and expression evaluation inside the debuggee process — that evaluation capability is stated in the approval text. Debuggee programs and breakpoint files must stay inside the workspace, and `runInTerminal` reverse requests are rejected.
 
 ### Local overrides
 

@@ -97,6 +97,9 @@
     - id: omd-editor
       name: 'oh-my-dsh/editor'
 
+    - id: omd-mentions
+      name: 'oh-my-dsh/mentions'
+
     - id: omd-advisor
       name: 'oh-my-dsh/advisor'
       config:
@@ -119,6 +122,11 @@
 
     - id: omd-kernel
       name: 'oh-my-dsh/kernel'
+
+    # DAP debugging is capability-heavy; sessions stay proposal-gated even when enabled.
+    - id: omd-debug
+      name: 'oh-my-dsh/debug'
+      disabled: !!js "process.env.OMD_ENABLE_DEBUG !== '1'"
 
     # Upstream opt-in: durable zoned time and elapsed time in model steps.
     - id: omd-time-context

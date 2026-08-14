@@ -83,11 +83,13 @@ omd trust add .
 
 ### 上游不会优先做的日用工具
 
+- `@file` 引用：在消息中用 `@path`、`@path:12-40` 或 `@"带空格的路径"` 引用工作区文件。被引用内容随同一 model step 注入、有大小上限，并渲染为 `hash_edit` 可直接使用的 anchor。仅做文本解析（输入框没有自动补全）；工作区之外的文件永远不会被注入。
 - `hash_edit` 使用逐行 anchor 和最终 filesystem version guard，安全替换多行内容。
 - `semantic_refactor` 创建带版本保护、可恢复的多文件 LSP 改名事务。
 - `kernel` 提供 session 级持久 JavaScript/Python 状态，并能回调 dsh 工具。
 - 可选 advisor 使用第二个模型复核已完成的顶层回合。
 - `/usage` 显示当前会话；`omd usage` 汇总已持久化会话。
+- 默认关闭的 DAP 调试：`debug_control` 为 `debugpy`、`lldb-dap` 或自定义 stdio adapter 准备 launch/attach proposal；只有批准后的 apply 才会启动 adapter 和被调试进程。
 - 默认关闭的精选 MCP 预设：`memory`、`context7`、`playwright`。
 - 随包提供 `review-changes`、`systematic-debugging`、`verify-before-done` skills。
 
@@ -140,6 +142,16 @@ omd
 ```
 
 每次复核都会增加延迟和一次额外模型调用。
+
+### 调试
+
+DAP 调试默认关闭：
+
+```sh
+OMD_ENABLE_DEBUG=1 omd
+```
+
+`debug_control adapters` 列出发现结果：`debugpy`（`python3`/`python` 可 import 时）、`lldb-dap`（PATH 上存在时），以及插件配置里的自定义 stdio adapter。launch 和 attach 只会返回 proposal；必须经用户批准的 `proposal_control apply` 才会启动 adapter 和被调试进程。批准后的 session 支持断点、单步、栈与变量查看，以及在被调试进程内求值表达式——该求值能力会写进审批文本。被调试程序和断点文件必须位于工作区内；`runInTerminal` 反向请求会被拒绝。
 
 ### 本地覆盖
 

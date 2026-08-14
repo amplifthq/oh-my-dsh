@@ -16,6 +16,8 @@ export type ProposalKind =
   | 'mcp-deactivate'
   | 'lsp-refactor'
   | 'lsp-recovery'
+  | 'debug-launch'
+  | 'debug-attach'
 
 export interface ProposalEffect {
   type: string
