@@ -20,9 +20,7 @@ import {
   convertPositionEncoding,
   normalizeWorkspaceEdit,
 } from '../dist/packages/refactor/src/workspace-edit.js'
-import {
-  RefactorServerRegistry,
-} from '../dist/packages/refactor/src/index.js'
+import { RefactorServerRegistry } from '../dist/packages/refactor/src/index.js'
 import {
   buildRefactorFilePlans,
   decodeRefactorText,
@@ -31,60 +29,74 @@ import {
 
 const renameEdit = {
   changes: {
-    'file:///workspace/a.ts': [{
-      range: {
-        start: { line: 0, character: 6 },
-        end: { line: 0, character: 9 },
+    'file:///workspace/a.ts': [
+      {
+        range: {
+          start: { line: 0, character: 6 },
+          end: { line: 0, character: 9 },
+        },
+        newText: 'newName',
       },
-      newText: 'newName',
-    }],
-    'file:///workspace/b.ts': [{
-      range: {
-        start: { line: 1, character: 0 },
-        end: { line: 1, character: 3 },
+    ],
+    'file:///workspace/b.ts': [
+      {
+        range: {
+          start: { line: 1, character: 0 },
+          end: { line: 1, character: 3 },
+        },
+        newText: 'newName',
       },
-      newText: 'newName',
-    }],
+    ],
   },
 }
 
 test('normalizes multi-file WorkspaceEdit changes in URI order', () => {
   const normalized = normalizeWorkspaceEdit(renameEdit)
 
-  assert.deepEqual(normalized.map((document) => document.uri), [
-    'file:///workspace/a.ts',
-    'file:///workspace/b.ts',
-  ])
+  assert.deepEqual(
+    normalized.map((document) => document.uri),
+    ['file:///workspace/a.ts', 'file:///workspace/b.ts'],
+  )
   assert.equal(normalized[0].edits[0].newText, 'newName')
 })
 
 test('normalizes text document edits but rejects resource operations', () => {
   const normalized = normalizeWorkspaceEdit({
-    documentChanges: [{
-      textDocument: { uri: 'file:///workspace/a.ts', version: 3 },
-      edits: renameEdit.changes['file:///workspace/a.ts'],
-    }],
+    documentChanges: [
+      {
+        textDocument: { uri: 'file:///workspace/a.ts', version: 3 },
+        edits: renameEdit.changes['file:///workspace/a.ts'],
+      },
+    ],
   })
   assert.equal(normalized[0].version, 3)
 
-  assert.throws(() => normalizeWorkspaceEdit({
-    documentChanges: [{
-      kind: 'rename',
-      oldUri: 'file:///workspace/a.ts',
-      newUri: 'file:///workspace/b.ts',
-    }],
-  }), /resource operations are not supported/)
+  assert.throws(
+    () =>
+      normalizeWorkspaceEdit({
+        documentChanges: [
+          {
+            kind: 'rename',
+            oldUri: 'file:///workspace/a.ts',
+            newUri: 'file:///workspace/b.ts',
+          },
+        ],
+      }),
+    /resource operations are not supported/,
+  )
 })
 
 test('applies UTF-16, UTF-8, and UTF-32 positions correctly', () => {
   const content = 'const 😀x = 1;\n'
-  const edit = (character) => [{
-    range: {
-      start: { line: 0, character },
-      end: { line: 0, character: character + 1 },
+  const edit = (character) => [
+    {
+      range: {
+        start: { line: 0, character },
+        end: { line: 0, character: character + 1 },
+      },
+      newText: 'y',
     },
-    newText: 'y',
-  }]
+  ]
 
   assert.equal(applyTextEdits(content, edit(8), 'utf-16'), 'const 😀y = 1;\n')
   assert.equal(applyTextEdits(content, edit(10), 'utf-8'), 'const 😀y = 1;\n')
@@ -93,10 +105,10 @@ test('applies UTF-16, UTF-8, and UTF-32 positions correctly', () => {
 
 test('converts user UTF-16 coordinates to the server-selected encoding', () => {
   const content = '😀 old\n'
-  assert.deepEqual(
-    convertPositionEncoding(content, { line: 0, character: 3 }, 'utf-16', 'utf-8'),
-    { line: 0, character: 5 },
-  )
+  assert.deepEqual(convertPositionEncoding(content, { line: 0, character: 3 }, 'utf-16', 'utf-8'), {
+    line: 0,
+    character: 5,
+  })
   assert.deepEqual(
     convertPositionEncoding(content, { line: 0, character: 3 }, 'utf-16', 'utf-32'),
     { line: 0, character: 2 },
@@ -104,35 +116,53 @@ test('converts user UTF-16 coordinates to the server-selected encoding', () => {
 })
 
 test('rejects overlapping text edits', () => {
-  assert.throws(() => applyTextEdits('abcdef', [
-    {
-      range: { start: { line: 0, character: 1 }, end: { line: 0, character: 4 } },
-      newText: 'x',
-    },
-    {
-      range: { start: { line: 0, character: 3 }, end: { line: 0, character: 5 } },
-      newText: 'y',
-    },
-  ], 'utf-16'), /overlapping/)
+  assert.throws(
+    () =>
+      applyTextEdits(
+        'abcdef',
+        [
+          {
+            range: { start: { line: 0, character: 1 }, end: { line: 0, character: 4 } },
+            newText: 'x',
+          },
+          {
+            range: { start: { line: 0, character: 3 }, end: { line: 0, character: 5 } },
+            newText: 'y',
+          },
+        ],
+        'utf-16',
+      ),
+    /overlapping/,
+  )
 })
 
 test('rejects malformed WorkspaceEdit ranges and non-file URIs', () => {
-  assert.throws(() => normalizeWorkspaceEdit({
-    changes: {
-      'https://example.com/a.ts': [],
-    },
-  }), /file URI/)
-  assert.throws(() => normalizeWorkspaceEdit({
-    changes: {
-      'file:///workspace/a.ts': [{
-        range: {
-          start: { line: -1, character: 0 },
-          end: { line: 0, character: 0 },
+  assert.throws(
+    () =>
+      normalizeWorkspaceEdit({
+        changes: {
+          'https://example.com/a.ts': [],
         },
-        newText: 'x',
-      }],
-    },
-  }), /non-negative/)
+      }),
+    /file URI/,
+  )
+  assert.throws(
+    () =>
+      normalizeWorkspaceEdit({
+        changes: {
+          'file:///workspace/a.ts': [
+            {
+              range: {
+                start: { line: -1, character: 0 },
+                end: { line: 0, character: 0 },
+              },
+              newText: 'x',
+            },
+          ],
+        },
+      }),
+    /non-negative/,
+  )
 })
 
 const journal = {
@@ -140,11 +170,13 @@ const journal = {
   id: 'refactor-1',
   cwd: '/workspace',
   status: 'applying',
-  files: [{
-    path: '/workspace/a.ts',
-    before: 'old',
-    after: 'new',
-  }],
+  files: [
+    {
+      path: '/workspace/a.ts',
+      before: 'old',
+      after: 'new',
+    },
+  ],
 }
 
 test('recovery journals round trip with private permissions', () => {
@@ -160,32 +192,52 @@ test('recovery journals round trip with private permissions', () => {
 })
 
 test('recovery restores only files still matching the applied content', () => {
-  assert.deepEqual(planJournalRecovery(journal, {
-    '/workspace/a.ts': 'new',
-  }), [{ path: '/workspace/a.ts', content: 'old' }])
-  assert.deepEqual(planJournalRecovery(journal, {
-    '/workspace/a.ts': 'old',
-  }), [])
-  assert.throws(() => planJournalRecovery(journal, {
-    '/workspace/a.ts': 'unrelated',
-  }), /changed after the refactor/)
+  assert.deepEqual(
+    planJournalRecovery(journal, {
+      '/workspace/a.ts': 'new',
+    }),
+    [{ path: '/workspace/a.ts', content: 'old' }],
+  )
+  assert.deepEqual(
+    planJournalRecovery(journal, {
+      '/workspace/a.ts': 'old',
+    }),
+    [],
+  )
+  assert.throws(
+    () =>
+      planJournalRecovery(journal, {
+        '/workspace/a.ts': 'unrelated',
+      }),
+    /changed after the refactor/,
+  )
 })
 
 test('recoverable apply clears its journal after success', async () => {
-  const contents = new Map([['a.ts', 'old-a'], ['b.ts', 'old-b']])
+  const contents = new Map([
+    ['a.ts', 'old-a'],
+    ['b.ts', 'old-b'],
+  ])
   let saved = 0
   let cleared = 0
-  await applyWithRollback([
-    { path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' },
-    { path: 'b.ts', before: 'old-b', after: 'new-b', version: 'b1' },
-  ], {
-    saveJournal: async () => { saved += 1 },
-    clearJournal: async () => { cleared += 1 },
-    write: async (file, content) => {
-      contents.set(file.path, content)
-      return `${file.path}-next`
+  await applyWithRollback(
+    [
+      { path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' },
+      { path: 'b.ts', before: 'old-b', after: 'new-b', version: 'b1' },
+    ],
+    {
+      saveJournal: async () => {
+        saved += 1
+      },
+      clearJournal: async () => {
+        cleared += 1
+      },
+      write: async (file, content) => {
+        contents.set(file.path, content)
+        return `${file.path}-next`
+      },
     },
-  })
+  )
 
   assert.deepEqual(Object.fromEntries(contents), { 'a.ts': 'new-a', 'b.ts': 'new-b' })
   assert.equal(saved, 1)
@@ -193,24 +245,35 @@ test('recoverable apply clears its journal after success', async () => {
 })
 
 test('recoverable apply rolls back earlier writes after a later failure', async () => {
-  const contents = new Map([['a.ts', 'old-a'], ['b.ts', 'old-b']])
+  const contents = new Map([
+    ['a.ts', 'old-a'],
+    ['b.ts', 'old-b'],
+  ])
   let calls = 0
   let cleared = 0
   const phases = []
-  await assert.rejects(applyWithRollback([
-    { path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' },
-    { path: 'b.ts', before: 'old-b', after: 'new-b', version: 'b1' },
-  ], {
-    saveJournal: async () => {},
-    clearJournal: async () => { cleared += 1 },
-    write: async (file, content, _version, phase) => {
-      calls += 1
-      phases.push(phase)
-      if (file.path === 'b.ts' && content === 'new-b') throw new Error('stale b')
-      contents.set(file.path, content)
-      return `${file.path}-${calls}`
-    },
-  }), /stale b/)
+  await assert.rejects(
+    applyWithRollback(
+      [
+        { path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' },
+        { path: 'b.ts', before: 'old-b', after: 'new-b', version: 'b1' },
+      ],
+      {
+        saveJournal: async () => {},
+        clearJournal: async () => {
+          cleared += 1
+        },
+        write: async (file, content, _version, phase) => {
+          calls += 1
+          phases.push(phase)
+          if (file.path === 'b.ts' && content === 'new-b') throw new Error('stale b')
+          contents.set(file.path, content)
+          return `${file.path}-${calls}`
+        },
+      },
+    ),
+    /stale b/,
+  )
 
   assert.deepEqual(Object.fromEntries(contents), { 'a.ts': 'old-a', 'b.ts': 'old-b' })
   assert.equal(cleared, 1)
@@ -220,19 +283,22 @@ test('recoverable apply rolls back earlier writes after a later failure', async 
 test('recoverable apply tracks a published write before post-write observers run', async () => {
   const contents = new Map([['a.ts', 'old-a']])
   let cleared = 0
-  await assert.rejects(applyWithRollback([
-    { path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' },
-  ], {
-    saveJournal: async () => {},
-    clearJournal: async () => { cleared += 1 },
-    write: async (file, content) => {
-      contents.set(file.path, content)
-      return `${file.path}-${content}`
-    },
-    afterWrite: async (_file, _version, phase) => {
-      if (phase === 'apply') throw new Error('observer failed')
-    },
-  }), /observer failed/)
+  await assert.rejects(
+    applyWithRollback([{ path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' }], {
+      saveJournal: async () => {},
+      clearJournal: async () => {
+        cleared += 1
+      },
+      write: async (file, content) => {
+        contents.set(file.path, content)
+        return `${file.path}-${content}`
+      },
+      afterWrite: async (_file, _version, phase) => {
+        if (phase === 'apply') throw new Error('observer failed')
+      },
+    }),
+    /observer failed/,
+  )
 
   assert.equal(contents.get('a.ts'), 'old-a')
   assert.equal(cleared, 1)
@@ -240,18 +306,19 @@ test('recoverable apply tracks a published write before post-write observers run
 
 test('journal cleanup failure does not report a committed refactor as failed', async () => {
   const contents = new Map([['a.ts', 'old-a']])
-  const result = await applyWithRollback([
-    { path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' },
-  ], {
-    saveJournal: async () => {},
-    clearJournal: async () => {
-      throw new Error('journal is busy')
+  const result = await applyWithRollback(
+    [{ path: 'a.ts', before: 'old-a', after: 'new-a', version: 'a1' }],
+    {
+      saveJournal: async () => {},
+      clearJournal: async () => {
+        throw new Error('journal is busy')
+      },
+      write: async (file, content) => {
+        contents.set(file.path, content)
+        return `${file.path}-next`
+      },
     },
-    write: async (file, content) => {
-      contents.set(file.path, content)
-      return `${file.path}-next`
-    },
-  })
+  )
 
   assert.equal(contents.get('a.ts'), 'new-a')
   assert.deepEqual(result, {
@@ -283,11 +350,13 @@ test('one-shot rename performs a bounded transient document lifecycle', async ()
     documentUri: 'file:///workspace/a.ts',
     languageId: 'typescript',
     content: 'const old = 1\n',
-    additionalDocuments: [{
-      documentUri: 'file:///workspace/b.ts',
-      languageId: 'typescript',
-      content: 'export { old } from "./a"\n',
-    }],
+    additionalDocuments: [
+      {
+        documentUri: 'file:///workspace/b.ts',
+        languageId: 'typescript',
+        content: 'export { old } from "./a"\n',
+      },
+    ],
     position: { line: 0, character: 6 },
     newName: 'newName',
     initializationOptions: { preferences: { includeInlayParameterNameHints: 'none' } },
@@ -297,48 +366,67 @@ test('one-shot rename performs a bounded transient document lifecycle', async ()
   assert.deepEqual(calls[0][2].initializationOptions, {
     preferences: { includeInlayParameterNameHints: 'none' },
   })
-  assert.deepEqual(calls.map((call) => `${call[0]}:${call[1]}`), [
-    'request:initialize',
-    'notify:initialized',
-    'notify:textDocument/didOpen',
-    'notify:textDocument/didOpen',
-    'request:textDocument/rename',
-    'notify:textDocument/didClose',
-    'notify:textDocument/didClose',
-    'request:shutdown',
-    'notify:exit',
-  ])
+  assert.deepEqual(
+    calls.map((call) => `${call[0]}:${call[1]}`),
+    [
+      'request:initialize',
+      'notify:initialized',
+      'notify:textDocument/didOpen',
+      'notify:textDocument/didOpen',
+      'request:textDocument/rename',
+      'notify:textDocument/didClose',
+      'notify:textDocument/didClose',
+      'request:shutdown',
+      'notify:exit',
+    ],
+  )
   const opened = calls.filter((call) => call[1] === 'textDocument/didOpen')
   assert.equal(opened[1][2].textDocument.text, 'export { old } from "./a"\n')
 })
 
 test('LSP compatibility host rejects server-driven edits and commands', async () => {
   await assert.rejects(
-    answerLspServerRequest('workspace/applyEdit', {}, {
-      configuration: null,
-      workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
-    }),
+    answerLspServerRequest(
+      'workspace/applyEdit',
+      {},
+      {
+        configuration: null,
+        workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
+      },
+    ),
     /server-driven workspace edits are disabled/,
   )
   await assert.rejects(
-    answerLspServerRequest('workspace/executeCommand', {}, {
-      configuration: null,
-      workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
-    }),
+    answerLspServerRequest(
+      'workspace/executeCommand',
+      {},
+      {
+        configuration: null,
+        workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
+      },
+    ),
     /server request is not supported/,
   )
   assert.deepEqual(
-    await answerLspServerRequest('workspace/configuration', { items: [{}, {}] }, {
-      configuration: { lint: true },
-      workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
-    }),
+    await answerLspServerRequest(
+      'workspace/configuration',
+      { items: [{}, {}] },
+      {
+        configuration: { lint: true },
+        workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
+      },
+    ),
     [{ lint: true }, { lint: true }],
   )
   assert.deepEqual(
-    await answerLspServerRequest('workspace/workspaceFolders', {}, {
-      configuration: null,
-      workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
-    }),
+    await answerLspServerRequest(
+      'workspace/workspaceFolders',
+      {},
+      {
+        configuration: null,
+        workspaceFolders: [{ uri: 'file:///workspace', name: 'workspace' }],
+      },
+    ),
     [{ uri: 'file:///workspace', name: 'workspace' }],
   )
 })
@@ -387,18 +475,30 @@ test('refactor server routes are deterministic and dispose cleanly', () => {
 
   assert.equal(registry.resolve('/workspace/example.ts')?.id, 'typescript')
   assert.equal(registry.resolve('/workspace/example.tsx')?.languageId, 'typescriptreact')
-  assert.throws(() => registry.register('other', {
-    command: 'other',
-    extensionToLanguage: { '.ts': 'typescript' },
-  }), /already registered/)
+  assert.throws(
+    () =>
+      registry.register('other', {
+        command: 'other',
+        extensionToLanguage: { '.ts': 'typescript' },
+      }),
+    /already registered/,
+  )
   dispose()
   assert.equal(registry.resolve('/workspace/example.ts'), undefined)
 })
 
 test('builds exact before and after plans for every LSP-edited file', async () => {
   const contents = {
-    'file:///workspace/a.ts': { path: '/workspace/a.ts', content: 'const old = 1;\n', version: 'a1' },
-    'file:///workspace/b.ts': { path: '/workspace/b.ts', content: 'import x\nold();\n', version: 'b1' },
+    'file:///workspace/a.ts': {
+      path: '/workspace/a.ts',
+      content: 'const old = 1;\n',
+      version: 'a1',
+    },
+    'file:///workspace/b.ts': {
+      path: '/workspace/b.ts',
+      content: 'import x\nold();\n',
+      version: 'b1',
+    },
   }
   const plans = await buildRefactorFilePlans(
     normalizeWorkspaceEdit(renameEdit),
@@ -406,25 +506,28 @@ test('builds exact before and after plans for every LSP-edited file', async () =
     async (uri) => contents[uri],
   )
 
-  assert.deepEqual(plans.map(({ path, before, after, version }) => ({
-    path,
-    before,
-    after,
-    version,
-  })), [
-    {
-      path: '/workspace/a.ts',
-      before: 'const old = 1;\n',
-      after: 'const newName = 1;\n',
-      version: 'a1',
-    },
-    {
-      path: '/workspace/b.ts',
-      before: 'import x\nold();\n',
-      after: 'import x\nnewName();\n',
-      version: 'b1',
-    },
-  ])
+  assert.deepEqual(
+    plans.map(({ path, before, after, version }) => ({
+      path,
+      before,
+      after,
+      version,
+    })),
+    [
+      {
+        path: '/workspace/a.ts',
+        before: 'const old = 1;\n',
+        after: 'const newName = 1;\n',
+        version: 'a1',
+      },
+      {
+        path: '/workspace/b.ts',
+        before: 'import x\nold();\n',
+        after: 'import x\nnewName();\n',
+        version: 'b1',
+      },
+    ],
+  )
 })
 
 test('refactor read budget caps file count, individual size, and aggregate size', () => {

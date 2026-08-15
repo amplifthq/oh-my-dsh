@@ -183,53 +183,68 @@ export class ProposalRuntime extends Service {
       }
     })
 
-    ctx.tools.register(defineTool({
-      name: 'proposal_control',
-      description: 'List, inspect, explicitly apply, or discard pending oh-my-dsh capability and refactor proposals.',
-      parameters: {
-        action: {
-          type: 'string',
-          required: true,
-          enum: ['list', 'show', 'apply', 'discard'],
-          description: 'Operation to perform.',
+    ctx.tools.register(
+      defineTool({
+        name: 'proposal_control',
+        description:
+          'List, inspect, explicitly apply, or discard pending oh-my-dsh capability and refactor proposals.',
+        parameters: {
+          action: {
+            type: 'string',
+            required: true,
+            enum: ['list', 'show', 'apply', 'discard'],
+            description: 'Operation to perform.',
+          },
+          proposal_id: {
+            type: 'string',
+            description: 'Proposal id required by show, apply, and discard.',
+          },
         },
-        proposal_id: {
-          type: 'string',
-          description: 'Proposal id required by show, apply, and discard.',
+        output: {
+          schema: { type: 'string' },
+          render: (_args, value) => [{ type: 'text', text: value }],
         },
-      },
-      output: {
-        schema: { type: 'string' },
-        render: (_args, value) => [{ type: 'text', text: value }],
-      },
-      execute: async (args, exec) => {
-        const agent = requireAgent(exec)
-        if (args.action === 'list') {
-          return JSON.stringify({ action: 'list', proposals: this.list(agent) }, null, 2)
-        }
-        if (!args.proposal_id) {
-          throw new Error(`${args.action} requires proposal_id`)
-        }
-        if (args.action === 'show') {
-          return JSON.stringify({
-            action: 'show',
-            proposal: this.show(agent, args.proposal_id) ?? null,
-          }, null, 2)
-        }
-        if (args.action === 'discard') {
-          return JSON.stringify({
-            action: 'discard',
-            proposalId: args.proposal_id,
-            discarded: this.discard(agent, args.proposal_id),
-          }, null, 2)
-        }
-        return JSON.stringify({
-          action: 'apply',
-          proposalId: args.proposal_id,
-          result: await this.apply(agent, args.proposal_id, exec),
-        }, null, 2)
-      },
-    }))
+        execute: async (args, exec) => {
+          const agent = requireAgent(exec)
+          if (args.action === 'list') {
+            return JSON.stringify({ action: 'list', proposals: this.list(agent) }, null, 2)
+          }
+          if (!args.proposal_id) {
+            throw new Error(`${args.action} requires proposal_id`)
+          }
+          if (args.action === 'show') {
+            return JSON.stringify(
+              {
+                action: 'show',
+                proposal: this.show(agent, args.proposal_id) ?? null,
+              },
+              null,
+              2,
+            )
+          }
+          if (args.action === 'discard') {
+            return JSON.stringify(
+              {
+                action: 'discard',
+                proposalId: args.proposal_id,
+                discarded: this.discard(agent, args.proposal_id),
+              },
+              null,
+              2,
+            )
+          }
+          return JSON.stringify(
+            {
+              action: 'apply',
+              proposalId: args.proposal_id,
+              result: await this.apply(agent, args.proposal_id, exec),
+            },
+            null,
+            2,
+          )
+        },
+      }),
+    )
   }
 
   create(agent: Agent, input: CreateProposalInput): ProposalView {

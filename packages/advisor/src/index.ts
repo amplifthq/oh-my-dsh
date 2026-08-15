@@ -61,22 +61,29 @@ export function transcriptForReview(agent: Agent, maxBytes: number): string {
   return selected.reverse().join('\n\n')
 }
 
-async function review(ctx: Context, agent: Agent, config: Config, signal: AbortSignal): Promise<string> {
+async function review(
+  ctx: Context,
+  agent: Agent,
+  config: Config,
+  signal: AbortSignal,
+): Promise<string> {
   const transcript = transcriptForReview(agent, config.maxInputBytes ?? 48_000)
   if (!transcript) return ''
   const prompt = createUserMessage({
-    content: [{
-      type: 'text',
-      text: [
-        'Review the completed coding-agent turn below as an independent senior engineer.',
-        'Look only for concrete correctness, safety, requirement, or verification problems.',
-        'Return exactly OK if there is no actionable issue.',
-        'Otherwise return one short line beginning ASIDE:, CONCERN:, or BLOCKER:, followed by the issue and the next action.',
-        'Do not praise, summarize, or speculate.',
-        '',
-        transcript,
-      ].join('\n'),
-    }],
+    content: [
+      {
+        type: 'text',
+        text: [
+          'Review the completed coding-agent turn below as an independent senior engineer.',
+          'Look only for concrete correctness, safety, requirement, or verification problems.',
+          'Return exactly OK if there is no actionable issue.',
+          'Otherwise return one short line beginning ASIDE:, CONCERN:, or BLOCKER:, followed by the issue and the next action.',
+          'Do not praise, summarize, or speculate.',
+          '',
+          transcript,
+        ].join('\n'),
+      },
+    ],
     source: { kind: 'plugin', plugin: name },
   })
   let output = ''
@@ -118,25 +125,32 @@ export function apply(ctx: Context, config: Config): void {
         reviewing.delete(agent)
         return
       }
-      void agent.runMaintenance(async (signal) => {
-        const note = await review(ctx, agent, config, signal)
-        if (!note || /^OK[.!]?$/i.test(note)) return
-        agent.inject(createUserMessage({
-          content: [{
-            type: 'text',
-            text: `<advisor-note>\n${note}\nAddress this on the next relevant step or explain why it does not apply.\n</advisor-note>`,
-          }],
-          source: {
-            kind: 'plugin',
-            plugin: name,
-            form: 'notice',
-            summary: note.slice(0, 120),
-          },
-        }))
-      }).catch(() => {
-        // Advisory review is non-authoritative; a provider failure must not
-        // fail or wake the primary agent.
-      }).finally(() => reviewing.delete(agent))
+      void agent
+        .runMaintenance(async (signal) => {
+          const note = await review(ctx, agent, config, signal)
+          if (!note || /^OK[.!]?$/i.test(note)) return
+          agent.inject(
+            createUserMessage({
+              content: [
+                {
+                  type: 'text',
+                  text: `<advisor-note>\n${note}\nAddress this on the next relevant step or explain why it does not apply.\n</advisor-note>`,
+                },
+              ],
+              source: {
+                kind: 'plugin',
+                plugin: name,
+                form: 'notice',
+                summary: note.slice(0, 120),
+              },
+            }),
+          )
+        })
+        .catch(() => {
+          // Advisory review is non-authoritative; a provider failure must not
+          // fail or wake the primary agent.
+        })
+        .finally(() => reviewing.delete(agent))
     })
   })
 }

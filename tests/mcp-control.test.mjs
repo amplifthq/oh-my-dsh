@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  mkdtempSync,
-  rmSync,
-  statSync,
-  utimesSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -122,7 +116,9 @@ test('catalog search ranks cached tool metadata without activating a server', ()
   const entries = [
     {
       ...redactedServerView(stdio),
-      cachedTools: [{ name: 'resolve-library-id', description: 'Resolve documentation libraries.' }],
+      cachedTools: [
+        { name: 'resolve-library-id', description: 'Resolve documentation libraries.' },
+      ],
     },
     {
       ...redactedServerView({ ...stdio, name: 'browser' }),
@@ -195,9 +191,13 @@ test('locked metadata updates merge latest entries and recover stale locks', asy
     writeFileSync(`${path}.lock`, 'held', { mode: 0o600 })
     const stale = new Date(Date.now() - 60_000)
     utimesSync(`${path}.lock`, stale, stale)
-    await updateMcpCache(path, {
-      other: { fingerprint: 'other-fingerprint', tools: [] },
-    }, { staleMs: 1_000 })
+    await updateMcpCache(
+      path,
+      {
+        other: { fingerprint: 'other-fingerprint', tools: [] },
+      },
+      { staleMs: 1_000 },
+    )
     assert.deepEqual(Object.keys(readMcpCache(path)).sort(), ['browser', 'docs', 'other'])
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -215,7 +215,11 @@ test('MCP loader is called only by explicit activation and deactivation disposes
     assert.equal(definition.name, 'docs')
     assert.match(namespace, /^[A-Za-z0-9_-]{1,32}$/)
     return {
-      fiber: { dispose: async () => { disposals += 1 } },
+      fiber: {
+        dispose: async () => {
+          disposals += 1
+        },
+      },
       tools: [{ name: 'lookup', description: 'Look up documentation.' }],
     }
   })
@@ -236,7 +240,11 @@ test('reconfiguration and controller disposal cannot orphan active MCP fibers', 
   const secondAgent = {}
   let disposals = 0
   const controller = new McpActivationController(store, async () => ({
-    fiber: { dispose: async () => { disposals += 1 } },
+    fiber: {
+      dispose: async () => {
+        disposals += 1
+      },
+    },
     tools: [],
   }))
 
@@ -265,12 +273,21 @@ test('activation rejects changed definitions and disposes a loaded race loser', 
   const agent = {}
   let finishLoad
   let disposals = 0
-  const controller = new McpActivationController(store, () => new Promise((resolve) => {
-    finishLoad = () => resolve({
-      fiber: { dispose: async () => { disposals += 1 } },
-      tools: [],
-    })
-  }))
+  const controller = new McpActivationController(
+    store,
+    () =>
+      new Promise((resolve) => {
+        finishLoad = () =>
+          resolve({
+            fiber: {
+              dispose: async () => {
+                disposals += 1
+              },
+            },
+            tools: [],
+          })
+      }),
+  )
   await controller.configure(agent, [stdio])
   const expectedFingerprint = fingerprintServer(stdio)
   const activating = controller.activate(agent, 'agent', 'docs', expectedFingerprint)
@@ -289,12 +306,21 @@ test('activation drains its loader after abort and disposes a late server', asyn
   const lifecycle = new AbortController()
   let finishLoad
   let disposals = 0
-  const controller = new McpActivationController(store, () => new Promise((resolve) => {
-    finishLoad = () => resolve({
-      fiber: { dispose: async () => { disposals += 1 } },
-      tools: [],
-    })
-  }))
+  const controller = new McpActivationController(
+    store,
+    () =>
+      new Promise((resolve) => {
+        finishLoad = () =>
+          resolve({
+            fiber: {
+              dispose: async () => {
+                disposals += 1
+              },
+            },
+            tools: [],
+          })
+      }),
+  )
   await controller.configure(agent, [stdio])
   const activating = controller.activate(
     agent,
@@ -352,9 +378,10 @@ test('late loader rejection after abort is reported to cleanup diagnostics', asy
   let failLoad
   const controller = new McpActivationController(
     store,
-    () => new Promise((_, reject) => {
-      failLoad = reject
-    }),
+    () =>
+      new Promise((_, reject) => {
+        failLoad = reject
+      }),
     (error) => cleanupErrors.push(error),
   )
   await controller.configure(agent, [stdio])

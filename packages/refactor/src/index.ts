@@ -1,9 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import {
-  existsSync,
-  readdirSync,
-  rmSync,
-} from 'node:fs'
+import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -105,7 +101,9 @@ export class RefactorServerRegistry {
       }
       const existing = this.routes.get(normalized)
       if (existing) {
-        throw new Error(`refactor extension "${normalized}" is already registered by ${existing.id}`)
+        throw new Error(
+          `refactor extension "${normalized}" is already registered by ${existing.id}`,
+        )
       }
     }
     for (const [extension, languageId] of Object.entries(config.extensionToLanguage)) {
@@ -206,74 +204,87 @@ export class RefactorRuntime extends Service {
       text: 'Use semantic_refactor prepare_rename for cross-file symbol renames. It returns an exact, version-guarded proposal. Inspect every effect and apply it only through proposal_control. If a prior transaction reports incomplete rollback, inspect list_recovery and prepare a recovery proposal before editing those files.',
     })
 
-    ctx.tools.register(defineTool({
-      name: 'semantic_refactor',
-      description: 'Prepare a recoverable LSP symbol rename, list incomplete recovery journals, or prepare a guarded recovery proposal.',
-      parameters: {
-        action: {
-          type: 'string',
-          required: true,
-          enum: ['prepare_rename', 'list_recovery', 'prepare_recovery'],
-          description: 'Refactor operation.',
+    ctx.tools.register(
+      defineTool({
+        name: 'semantic_refactor',
+        description:
+          'Prepare a recoverable LSP symbol rename, list incomplete recovery journals, or prepare a guarded recovery proposal.',
+        parameters: {
+          action: {
+            type: 'string',
+            required: true,
+            enum: ['prepare_rename', 'list_recovery', 'prepare_recovery'],
+            description: 'Refactor operation.',
+          },
+          file_path: {
+            type: 'string',
+            description: 'Symbol file path, absolute or relative to the session workspace.',
+          },
+          line: {
+            type: 'integer',
+            description: 'One-based symbol line for prepare_rename.',
+          },
+          column: {
+            type: 'integer',
+            description: 'One-based UTF position column for prepare_rename.',
+          },
+          new_name: {
+            type: 'string',
+            description: 'New symbol name for prepare_rename.',
+          },
+          journal_id: {
+            type: 'string',
+            description: 'Recovery journal id returned by list_recovery.',
+          },
         },
-        file_path: {
-          type: 'string',
-          description: 'Symbol file path, absolute or relative to the session workspace.',
+        output: {
+          schema: { type: 'string' },
+          render: (_args, value) => [{ type: 'text', text: value }],
         },
-        line: {
-          type: 'integer',
-          description: 'One-based symbol line for prepare_rename.',
+        execute: async (args, exec) => {
+          const agent = requireAgent(exec)
+          if (args.action === 'list_recovery') {
+            return JSON.stringify({ journals: this.listRecovery(agent) }, null, 2)
+          }
+          if (args.action === 'prepare_recovery') {
+            if (!args.journal_id) throw new Error('prepare_recovery requires journal_id')
+            return JSON.stringify(
+              {
+                proposal: await this.prepareRecovery(agent, args.journal_id, exec),
+              },
+              null,
+              2,
+            )
+          }
+          if (
+            !args.file_path ||
+            !Number.isInteger(args.line) ||
+            (args.line as number) < 1 ||
+            !Number.isInteger(args.column) ||
+            (args.column as number) < 1 ||
+            !args.new_name?.trim()
+          ) {
+            throw new Error(
+              'prepare_rename requires file_path, positive line/column, and non-empty new_name',
+            )
+          }
+          return JSON.stringify(
+            {
+              proposal: await this.prepareRename(
+                agent,
+                args.file_path,
+                args.line as number,
+                args.column as number,
+                args.new_name,
+                exec,
+              ),
+            },
+            null,
+            2,
+          )
         },
-        column: {
-          type: 'integer',
-          description: 'One-based UTF position column for prepare_rename.',
-        },
-        new_name: {
-          type: 'string',
-          description: 'New symbol name for prepare_rename.',
-        },
-        journal_id: {
-          type: 'string',
-          description: 'Recovery journal id returned by list_recovery.',
-        },
-      },
-      output: {
-        schema: { type: 'string' },
-        render: (_args, value) => [{ type: 'text', text: value }],
-      },
-      execute: async (args, exec) => {
-        const agent = requireAgent(exec)
-        if (args.action === 'list_recovery') {
-          return JSON.stringify({ journals: this.listRecovery(agent) }, null, 2)
-        }
-        if (args.action === 'prepare_recovery') {
-          if (!args.journal_id) throw new Error('prepare_recovery requires journal_id')
-          return JSON.stringify({
-            proposal: await this.prepareRecovery(agent, args.journal_id, exec),
-          }, null, 2)
-        }
-        if (
-          !args.file_path
-          || !Number.isInteger(args.line)
-          || (args.line as number) < 1
-          || !Number.isInteger(args.column)
-          || (args.column as number) < 1
-          || !args.new_name?.trim()
-        ) {
-          throw new Error('prepare_rename requires file_path, positive line/column, and non-empty new_name')
-        }
-        return JSON.stringify({
-          proposal: await this.prepareRename(
-            agent,
-            args.file_path,
-            args.line as number,
-            args.column as number,
-            args.new_name,
-            exec,
-          ),
-        }, null, 2)
-      },
-    }))
+      }),
+    )
   }
 
   registerServer(id: string, config: RefactorServerConfig): () => void {
@@ -315,16 +326,17 @@ export class RefactorRuntime extends Service {
       route.config,
       this.ctx.fs.processPath(workspaceTarget),
       workspaceUri,
-      (connection) => executeOneShotRename(connection, {
-        processId: process.pid,
-        workspaceUri,
-        documentUri,
-        languageId: route.languageId,
-        content: sourceContent,
-        position: { line: line - 1, character: column - 1 },
-        newName,
-        initializationOptions: route.config.initializationOptions,
-      }),
+      (connection) =>
+        executeOneShotRename(connection, {
+          processId: process.pid,
+          workspaceUri,
+          documentUri,
+          languageId: route.languageId,
+          content: sourceContent,
+          position: { line: line - 1, character: column - 1 },
+          newName,
+          initializationOptions: route.config.initializationOptions,
+        }),
       prepareSignal,
     )
     const discoveryDocuments = normalizeWorkspaceEdit(discoveryResult.workspaceEdit)
@@ -335,13 +347,16 @@ export class RefactorRuntime extends Service {
       throw new Error(`semantic refactor touches more than ${this.config.maxFiles} files`)
     }
     const sourceUri = new URL(documentUri).toString()
-    const snapshots = new Map<string, {
-      target: FsTarget
-      path: string
-      content: string
-      version: string
-      languageId: string
-    }>()
+    const snapshots = new Map<
+      string,
+      {
+        target: FsTarget
+        path: string
+        content: string
+        version: string
+        languageId: string
+      }
+    >()
     snapshots.set(sourceUri, {
       target: sourceTarget,
       path: sourceTarget.displayPath,
@@ -367,23 +382,24 @@ export class RefactorRuntime extends Service {
       route.config,
       this.ctx.fs.processPath(workspaceTarget),
       workspaceUri,
-      (connection) => executeOneShotRename(connection, {
-        processId: process.pid,
-        workspaceUri,
-        documentUri,
-        languageId: route.languageId,
-        content: sourceContent,
-        additionalDocuments: [...snapshots.entries()]
-          .filter(([uri]) => uri !== sourceUri)
-          .map(([uri, snapshot]) => ({
-            documentUri: uri,
-            languageId: snapshot.languageId,
-            content: snapshot.content,
-          })),
-        position: { line: line - 1, character: column - 1 },
-        newName,
-        initializationOptions: route.config.initializationOptions,
-      }),
+      (connection) =>
+        executeOneShotRename(connection, {
+          processId: process.pid,
+          workspaceUri,
+          documentUri,
+          languageId: route.languageId,
+          content: sourceContent,
+          additionalDocuments: [...snapshots.entries()]
+            .filter(([uri]) => uri !== sourceUri)
+            .map(([uri, snapshot]) => ({
+              documentUri: uri,
+              languageId: snapshot.languageId,
+              content: snapshot.content,
+            })),
+          position: { line: line - 1, character: column - 1 },
+          newName,
+          initializationOptions: route.config.initializationOptions,
+        }),
       prepareSignal,
     )
     const documents = normalizeWorkspaceEdit(result.workspaceEdit)
@@ -402,15 +418,11 @@ export class RefactorRuntime extends Service {
         )
       }
     }
-    const plans = await buildRefactorFilePlans(
-      documents,
-      result.encoding,
-      async (uri) => {
-        const snapshot = snapshots.get(uri)
-        if (!snapshot) throw new Error(`missing refactor snapshot for ${uri}`)
-        return snapshot
-      },
-    ) as RuntimeFilePlan[]
+    const plans = (await buildRefactorFilePlans(documents, result.encoding, async (uri) => {
+      const snapshot = snapshots.get(uri)
+      if (!snapshot) throw new Error(`missing refactor snapshot for ${uri}`)
+      return snapshot
+    })) as RuntimeFilePlan[]
     if (!plans.length) throw new Error('language server rename produced no text changes')
 
     const refactorId = `refactor-${randomUUID()}`
@@ -441,10 +453,7 @@ export class RefactorRuntime extends Service {
           refactorId,
           guardedCommit,
         )
-        const diagnostics = await this.verifyDiagnostics(
-          plans,
-          workspaceTarget,
-        )
+        const diagnostics = await this.verifyDiagnostics(plans, workspaceTarget)
         return {
           summary: `Applied semantic rename across ${plans.length} file(s).`,
           details: jsonSafe({
@@ -483,18 +492,10 @@ export class RefactorRuntime extends Service {
     }
   }
 
-  private async readFile(
-    target: FsTarget,
-    exec: ToolRunContext,
-    budget: RefactorReadBudget,
-  ) {
+  private async readFile(target: FsTarget, exec: ToolRunContext, budget: RefactorReadBudget) {
     const info = await this.requireFile(target, exec)
     if (info.size !== undefined) budget.accept(target.displayPath, info.size)
-    const bytes = await this.ctx.fs.readBytes(
-      target,
-      exec.signal,
-      this.config.maxFileBytes,
-    )
+    const bytes = await this.ctx.fs.readBytes(target, exec.signal, this.config.maxFileBytes)
     budget.accept(target.displayPath, bytes.byteLength)
     let content: string
     try {
@@ -551,13 +552,14 @@ export class RefactorRuntime extends Service {
     const targets = new Map(plans.map((plan) => [plan.path, plan.target]))
     try {
       return await applyWithRollback(versioned, {
-        saveJournal: (_files, status) => writeRefactorJournal(journalPath, {
-          version: 1,
-          id: refactorId,
-          cwd,
-          status,
-          files: versioned.map(({ path, before, after }) => ({ path, before, after })),
-        }),
+        saveJournal: (_files, status) =>
+          writeRefactorJournal(journalPath, {
+            version: 1,
+            id: refactorId,
+            cwd,
+            status,
+            files: versioned.map(({ path, before, after }) => ({ path, before, after })),
+          }),
         clearJournal: () => rmSync(journalPath, { force: true }),
         write: async (file, content, expectedVersion, phase) => {
           const target = targets.get(file.path)
@@ -574,10 +576,15 @@ export class RefactorRuntime extends Service {
         afterWrite: (file, version) => {
           const target = targets.get(file.path)
           if (!target) throw new Error(`missing refactor target ${file.path}`)
-          this.ctx.emit('fs/observed', target, {
-            kind: 'present',
-            version: FsVersion(version),
-          }, exec)
+          this.ctx.emit(
+            'fs/observed',
+            target,
+            {
+              kind: 'present',
+              version: FsVersion(version),
+            },
+            exec,
+          )
         },
       })
     } catch (error) {
@@ -594,11 +601,13 @@ export class RefactorRuntime extends Service {
         try {
           const journal = readRefactorJournal(join(this.journalDirectory, entry))
           if (resolve(journal.cwd) !== cwd) return []
-          return [{
-            id: journal.id,
-            status: journal.status,
-            files: journal.files.map((file) => file.path),
-          }]
+          return [
+            {
+              id: journal.id,
+              status: journal.status,
+              files: journal.files.map((file) => file.path),
+            },
+          ]
         } catch {
           return []
         }
@@ -610,7 +619,8 @@ export class RefactorRuntime extends Service {
     const path = this.journalPath(journalId)
     const journal = readRefactorJournal(path)
     const cwd = resolve(agent.session.header.cwd ?? process.cwd())
-    if (resolve(journal.cwd) !== cwd) throw new Error('recovery journal belongs to another workspace')
+    if (resolve(journal.cwd) !== cwd)
+      throw new Error('recovery journal belongs to another workspace')
     const workspaceTarget = await this.ctx.fs.resolve(cwd, { signal: exec.signal })
     const currentContents: Record<string, string> = {}
     const states = new Map<string, { target: FsTarget; version: string }>()
@@ -689,23 +699,29 @@ export class RefactorRuntime extends Service {
     cwd: string,
     workspaceUri: string,
   ): LspConnection {
-    return new LspConnection({
-      command: config.command,
-      args: config.args ?? [],
-      cwd,
-      env: config.env ?? {},
-      maxMessageBytes: config.maxMessageBytes ?? 16_000_000,
-      maxStderrBytes: config.maxStderrBytes ?? 1_000_000,
-      killGraceMs: config.killGraceMs ?? 2_000,
-      configuration: config.configuration ?? null,
-    }, (spec) => this.ctx.subprocess.spawn(spec), (method, params) =>
-      answerLspServerRequest(method, params, {
+    return new LspConnection(
+      {
+        command: config.command,
+        args: config.args ?? [],
+        cwd,
+        env: config.env ?? {},
+        maxMessageBytes: config.maxMessageBytes ?? 16_000_000,
+        maxStderrBytes: config.maxStderrBytes ?? 1_000_000,
+        killGraceMs: config.killGraceMs ?? 2_000,
         configuration: config.configuration ?? null,
-        workspaceFolders: [{
-          uri: workspaceUri,
-          name: basename(cwd) || 'workspace',
-        }],
-      }))
+      },
+      (spec) => this.ctx.subprocess.spawn(spec),
+      (method, params) =>
+        answerLspServerRequest(method, params, {
+          configuration: config.configuration ?? null,
+          workspaceFolders: [
+            {
+              uri: workspaceUri,
+              name: basename(cwd) || 'workspace',
+            },
+          ],
+        }),
+    )
   }
 
   private async withConnection<T>(
@@ -754,14 +770,15 @@ export class RefactorRuntime extends Service {
           route.config,
           this.ctx.fs.processPath(workspaceTarget),
           workspaceUri,
-          (connection) => executeOneShotDiagnostics(connection, {
-            processId: process.pid,
-            workspaceUri,
-            documentUri: this.ctx.fs.fileUrl(plan.target),
-            languageId: route.languageId,
-            content: plan.after,
-            initializationOptions: route.config.initializationOptions,
-          }),
+          (connection) =>
+            executeOneShotDiagnostics(connection, {
+              processId: process.pid,
+              workspaceUri,
+              documentUri: this.ctx.fs.fileUrl(plan.target),
+              languageId: route.languageId,
+              content: plan.after,
+              initializationOptions: route.config.initializationOptions,
+            }),
           signal,
         )
         files.push({

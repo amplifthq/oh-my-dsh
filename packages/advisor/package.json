@@ -4,7 +4,12 @@
   "description": "Optional second-model review after each completed agent turn.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "advisor", "review"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "advisor",
+    "review"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

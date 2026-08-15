@@ -42,7 +42,10 @@ function sendNotification(title: string, body: string): void {
   if (process.platform === 'darwin') {
     command = 'osascript'
     // JSON.stringify produces escaping that AppleScript string literals accept.
-    args = ['-e', `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`]
+    args = [
+      '-e',
+      `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`,
+    ]
   } else if (process.platform === 'linux') {
     command = 'notify-send'
     args = [title, body]

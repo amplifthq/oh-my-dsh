@@ -4,7 +4,12 @@
   "description": "SSRF-hardened web fetch provider and shell fetch-degradation guard for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "web-fetch", "ssrf"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "web-fetch",
+    "ssrf"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

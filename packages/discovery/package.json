@@ -4,7 +4,11 @@
   "description": "Native discovery of rules, skills, and MCP servers from other coding agents.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "oh-my-dsh"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "oh-my-dsh"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

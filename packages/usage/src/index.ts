@@ -30,13 +30,16 @@ export function summarizeUsage(session: Session): UsageSummary {
     cacheWriteTokens: 0,
     reasoningTokens: 0,
   }
-  const usages = new Map<string, {
-    inputTokens: number
-    outputTokens: number
-    cacheReadTokens?: number
-    cacheWriteTokens?: number
-    reasoningTokens?: number
-  }>()
+  const usages = new Map<
+    string,
+    {
+      inputTokens: number
+      outputTokens: number
+      cacheReadTokens?: number
+      cacheWriteTokens?: number
+      reasoningTokens?: number
+    }
+  >()
   for (const event of session.events) {
     if (event.type === 'assistant/chunk' && event.data.chunk.type === 'usage') {
       usages.set(`${event.data.turn}:${event.data.step}`, event.data.chunk.usage)

@@ -32,10 +32,13 @@ test('emails, mid-word tokens, and code spans are not mentions', () => {
 
 test('invalid ranges fall back to the plain path', () => {
   const mentions = extractMentions('check @a.ts:40-10 and @b.ts:0-5')
-  assert.deepEqual(mentions.map((mention) => [mention.path, mention.start]), [
-    ['a.ts', undefined],
-    ['b.ts', undefined],
-  ])
+  assert.deepEqual(
+    mentions.map((mention) => [mention.path, mention.start]),
+    [
+      ['a.ts', undefined],
+      ['b.ts', undefined],
+    ],
+  )
 })
 
 test('duplicate mentions collapse to one', () => {
@@ -45,10 +48,21 @@ test('duplicate mentions collapse to one', () => {
 test('mentionsInMessages reads only user-sourced text blocks', () => {
   const messages = [
     { role: 'user', content: [{ type: 'text', text: 'fix @one.ts' }], source: { kind: 'user' } },
-    { role: 'user', content: [{ type: 'text', text: 'skip @two.ts' }], source: { kind: 'plugin', plugin: 'x' } },
-    { role: 'user', content: [{ type: 'text', text: 'also @one.ts and @three.ts' }], source: { kind: 'user' } },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'skip @two.ts' }],
+      source: { kind: 'plugin', plugin: 'x' },
+    },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'also @one.ts and @three.ts' }],
+      source: { kind: 'user' },
+    },
   ]
-  assert.deepEqual(mentionsInMessages(messages).map((mention) => mention.path), ['one.ts', 'three.ts'])
+  assert.deepEqual(
+    mentionsInMessages(messages).map((mention) => mention.path),
+    ['one.ts', 'three.ts'],
+  )
 })
 
 async function* chunked(text, size = 4) {
@@ -81,11 +95,12 @@ test('renderFileWindow emits hash_edit-compatible anchor rows', () => {
     maxLines: 200,
     maxBytes: 1000,
   })
-  assert.equal(text, [
-    'src/a.ts lines 1-2 of 2, 8 bytes:',
-    `1:${lineHash('aa')}|aa`,
-    `2:${lineHash('bb')}|bb`,
-  ].join('\n'))
+  assert.equal(
+    text,
+    ['src/a.ts lines 1-2 of 2, 8 bytes:', `1:${lineHash('aa')}|aa`, `2:${lineHash('bb')}|bb`].join(
+      '\n',
+    ),
+  )
 })
 
 test('renderFileWindow honors an explicit line range with a continuation footer', () => {
@@ -151,20 +166,35 @@ test('resolveSections prefers registered resolvers and skips failures', async ()
   }
   const fallback = async (mention) => ({ name: mention.raw, text: `file:${mention.path}` })
   const sections = await resolveSections(
-    [{ raw: '@special', path: 'special' }, { raw: '@plain', path: 'plain' }],
+    [
+      { raw: '@special', path: 'special' },
+      { raw: '@plain', path: 'plain' },
+    ],
     [failing, custom, fallback],
     context,
     { maxMentions: 6, maxTotalBytes: 1000 },
   )
-  assert.deepEqual(sections.map((section) => section.text), ['custom', 'file:plain'])
+  assert.deepEqual(
+    sections.map((section) => section.text),
+    ['custom', 'file:plain'],
+  )
 })
 
 test('resolveSections enforces the mention and total-byte caps', async () => {
   const resolver = async (mention) => ({ name: mention.raw, text: 'x'.repeat(30) })
-  const mentions = Array.from({ length: 5 }, (_value, index) => ({ raw: `@f${index}`, path: `f${index}` }))
-  const capped = await resolveSections(mentions, [resolver], context, { maxMentions: 2, maxTotalBytes: 1000 })
+  const mentions = Array.from({ length: 5 }, (_value, index) => ({
+    raw: `@f${index}`,
+    path: `f${index}`,
+  }))
+  const capped = await resolveSections(mentions, [resolver], context, {
+    maxMentions: 2,
+    maxTotalBytes: 1000,
+  })
   assert.equal(capped.length, 2)
-  const bytes = await resolveSections(mentions, [resolver], context, { maxMentions: 5, maxTotalBytes: 65 })
+  const bytes = await resolveSections(mentions, [resolver], context, {
+    maxMentions: 5,
+    maxTotalBytes: 65,
+  })
   assert.equal(bytes.length, 2)
 })
 

@@ -4,7 +4,12 @@
   "description": "Previewable, version-guarded, recoverable semantic LSP refactors for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "lsp", "refactor"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "lsp",
+    "refactor"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

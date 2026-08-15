@@ -4,7 +4,12 @@
   "description": "Approval-gated proposal lifecycle for DeepSeek Harness capabilities and refactors.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "approval", "proposals"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "approval",
+    "proposals"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

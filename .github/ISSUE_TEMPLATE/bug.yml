@@ -22,7 +22,7 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: `omd doctor` output
+      label: '`omd doctor` output'
       render: text
   - type: textarea
     id: steps

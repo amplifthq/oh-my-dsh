@@ -43,14 +43,18 @@ export const Config: z<Config> = z.object({
   stopWaitMs: z.number().min(500).default(8_000),
   maxOutputChars: z.number().min(1_024).default(32_000),
   maxSessions: z.number().min(1).default(3),
-  adapters: z.dict(z.object({
-    command: z.string().required(),
-    args: z.array(z.string()),
-    description: z.string(),
-    languages: z.array(z.string()),
-    launchDefaults: z.any(),
-    supportsAttach: z.boolean(),
-  })).default({}),
+  adapters: z
+    .dict(
+      z.object({
+        command: z.string().required(),
+        args: z.array(z.string()),
+        description: z.string(),
+        languages: z.array(z.string()),
+        launchDefaults: z.any(),
+        supportsAttach: z.boolean(),
+      }),
+    )
+    .default({}),
 })
 
 interface ManagedSession {
@@ -82,7 +86,11 @@ function transportFor(handle: SubprocessHandle): DapTransport {
   return {
     write: (data) => void handle.stdin?.write(data),
     onData: (handler) => void handle.stdout?.on('data', handler),
-    onClose: (handler) => void handle.done.then(() => handler(), () => handler()),
+    onClose: (handler) =>
+      void handle.done.then(
+        () => handler(),
+        () => handler(),
+      ),
   }
 }
 
@@ -94,7 +102,10 @@ function groupBreakpoints(
     if (!Number.isInteger(breakpoint.line) || breakpoint.line < 1) {
       throw new Error(`breakpoint line must be a positive integer, got ${breakpoint.line}`)
     }
-    const entry = { line: breakpoint.line, ...(breakpoint.condition ? { condition: breakpoint.condition } : {}) }
+    const entry = {
+      line: breakpoint.line,
+      ...(breakpoint.condition ? { condition: breakpoint.condition } : {}),
+    }
     const existing = byFile.get(breakpoint.file)
     if (existing) existing.push(entry)
     else byFile.set(breakpoint.file, [entry])
@@ -173,9 +184,12 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   ctx.on('agent/disposed', ({ agent }) => disposeAgentSessions(agent))
-  ctx.effect(() => () => {
-    for (const managed of [...live]) void teardown(managed).catch(() => {})
-  }, 'omd-debug.sessions')
+  ctx.effect(
+    () => () => {
+      for (const managed of [...live]) void teardown(managed).catch(() => {})
+    },
+    'omd-debug.sessions',
+  )
 
   async function workspaceOf(agent: Agent, signal: AbortSignal | undefined) {
     const workspace = agent.session.header.cwd ?? process.cwd()
@@ -234,14 +248,17 @@ export function apply(ctx: Context, config: Config): void {
       stderrOffset: 0,
     }
     try {
-      const started = await session.start({
-        request,
-        arguments: launchArguments,
-        breakpoints: [...breakpoints.entries()].map(([path, entries]) => ({
-          path,
-          breakpoints: entries,
-        })),
-      }, launchTimeoutMs)
+      const started = await session.start(
+        {
+          request,
+          arguments: launchArguments,
+          breakpoints: [...breakpoints.entries()].map(([path, entries]) => ({
+            path,
+            breakpoints: entries,
+          })),
+        },
+        launchTimeoutMs,
+      )
       exec.signal.throwIfAborted()
       const status = waitForStopAfterStart
         ? await session.waitForStop(stopWaitMs)
@@ -260,74 +277,115 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: 'omd:debug',
     order: 115,
-    text: 'debug_control drives Debug Adapter Protocol sessions. prepare_launch and prepare_attach only return '
-      + 'proposals; starting the adapter and debuggee requires proposal_control apply with user approval. '
-      + 'On an approved session, set breakpoints, continue or step, then inspect stack, variables, and output; '
-      + 'evaluate runs expressions inside the debuggee.',
+    text:
+      'debug_control drives Debug Adapter Protocol sessions. prepare_launch and prepare_attach only return ' +
+      'proposals; starting the adapter and debuggee requires proposal_control apply with user approval. ' +
+      'On an approved session, set breakpoints, continue or step, then inspect stack, variables, and output; ' +
+      'evaluate runs expressions inside the debuggee.',
   })
 
-  ctx.tools.register(defineTool({
-    name: 'debug_control',
-    description:
-      'Debug programs over the Debug Adapter Protocol. Actions: adapters, sessions, prepare_launch, '
-      + 'prepare_attach (both return proposals that require proposal_control apply), breakpoints (replaces all '
-      + 'breakpoints in each mentioned file), continue, next, step_in, step_out, pause, stack, variables, '
-      + 'evaluate, output, terminate.',
-    parameters: {
-      action: {
-        type: 'string',
-        required: true,
-        enum: [
-          'adapters', 'sessions', 'prepare_launch', 'prepare_attach', 'breakpoints', 'continue', 'next',
-          'step_in', 'step_out', 'pause', 'stack', 'variables', 'evaluate', 'output', 'terminate',
-        ],
-        description: 'Operation to perform.',
-      },
-      adapter: { type: 'string', description: 'Adapter id for prepare_launch and prepare_attach.' },
-      program: { type: 'string', description: 'Workspace-relative or absolute program path to launch.' },
-      args: { type: 'array', items: { type: 'string' }, description: 'Debuggee argv after the program.' },
-      cwd: { type: 'string', description: 'Debuggee working directory; defaults to the workspace root.' },
-      env: {
-        type: 'object',
-        additionalProperties: true,
-        description: 'Extra environment variables for the debuggee.',
-      },
-      stop_on_entry: { type: 'boolean', description: 'Stop at the first instruction (default true).' },
-      breakpoints: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            file: { type: 'string', required: true, description: 'Source file path.' },
-            line: { type: 'number', required: true, description: '1-based line number.' },
-            condition: { type: 'string', description: 'Optional breakpoint condition expression.' },
-          },
+  ctx.tools.register(
+    defineTool({
+      name: 'debug_control',
+      description:
+        'Debug programs over the Debug Adapter Protocol. Actions: adapters, sessions, prepare_launch, ' +
+        'prepare_attach (both return proposals that require proposal_control apply), breakpoints (replaces all ' +
+        'breakpoints in each mentioned file), continue, next, step_in, step_out, pause, stack, variables, ' +
+        'evaluate, output, terminate.',
+      parameters: {
+        action: {
+          type: 'string',
+          required: true,
+          enum: [
+            'adapters',
+            'sessions',
+            'prepare_launch',
+            'prepare_attach',
+            'breakpoints',
+            'continue',
+            'next',
+            'step_in',
+            'step_out',
+            'pause',
+            'stack',
+            'variables',
+            'evaluate',
+            'output',
+            'terminate',
+          ],
+          description: 'Operation to perform.',
         },
-        description: 'Source breakpoints for prepare_launch or the breakpoints action.',
+        adapter: {
+          type: 'string',
+          description: 'Adapter id for prepare_launch and prepare_attach.',
+        },
+        program: {
+          type: 'string',
+          description: 'Workspace-relative or absolute program path to launch.',
+        },
+        args: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Debuggee argv after the program.',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Debuggee working directory; defaults to the workspace root.',
+        },
+        env: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Extra environment variables for the debuggee.',
+        },
+        stop_on_entry: {
+          type: 'boolean',
+          description: 'Stop at the first instruction (default true).',
+        },
+        breakpoints: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              file: { type: 'string', required: true, description: 'Source file path.' },
+              line: { type: 'number', required: true, description: '1-based line number.' },
+              condition: {
+                type: 'string',
+                description: 'Optional breakpoint condition expression.',
+              },
+            },
+          },
+          description: 'Source breakpoints for prepare_launch or the breakpoints action.',
+        },
+        config: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Adapter-specific launch/attach configuration merged in.',
+        },
+        session: {
+          type: 'string',
+          description: 'Debug session id returned by an applied proposal.',
+        },
+        thread: { type: 'number', description: 'Thread id; defaults to the stopped thread.' },
+        frame: { type: 'number', description: 'Stack frame id from the stack action.' },
+        ref: {
+          type: 'number',
+          description: 'variablesReference from a prior variables/evaluate result.',
+        },
+        expression: { type: 'string', description: 'Expression for evaluate.' },
+        max_frames: { type: 'number', description: 'Maximum stack frames to return (default 20).' },
       },
-      config: {
-        type: 'object',
-        additionalProperties: true,
-        description: 'Adapter-specific launch/attach configuration merged in.',
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
       },
-      session: { type: 'string', description: 'Debug session id returned by an applied proposal.' },
-      thread: { type: 'number', description: 'Thread id; defaults to the stopped thread.' },
-      frame: { type: 'number', description: 'Stack frame id from the stack action.' },
-      ref: { type: 'number', description: 'variablesReference from a prior variables/evaluate result.' },
-      expression: { type: 'string', description: 'Expression for evaluate.' },
-      max_frames: { type: 'number', description: 'Maximum stack frames to return (default 20).' },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    execute: async (args, exec) => {
-      const agent = requireAgent(exec)
-      const result = await executeAction(agent, args as Record<string, unknown>, exec)
-      return JSON.stringify(result, null, 2)
-    },
-  }))
+      execute: async (args, exec) => {
+        const agent = requireAgent(exec)
+        const result = await executeAction(agent, args as Record<string, unknown>, exec)
+        return JSON.stringify(result, null, 2)
+      },
+    }),
+  )
 
   async function executeAction(
     agent: Agent,
@@ -384,11 +442,23 @@ export function apply(ctx: Context, config: Config): void {
       return { action, session: managed.id, files: results }
     }
 
-    if (action === 'continue' || action === 'next' || action === 'step_in' || action === 'step_out') {
-      const command = { continue: 'continue', next: 'next', step_in: 'stepIn', step_out: 'stepOut' }[action]
+    if (
+      action === 'continue' ||
+      action === 'next' ||
+      action === 'step_in' ||
+      action === 'step_out'
+    ) {
+      const command = {
+        continue: 'continue',
+        next: 'next',
+        step_in: 'stepIn',
+        step_out: 'stepOut',
+      }[action]
       const threadId = (args.thread as number | undefined) ?? managed.session.stoppedThreadId()
       if (threadId === undefined) {
-        throw new Error(`${action} requires a stopped thread; current state is ${managed.session.status().state}`)
+        throw new Error(
+          `${action} requires a stopped thread; current state is ${managed.session.status().state}`,
+        )
       }
       await managed.session.request(command, { threadId })
       const status = await managed.session.waitForStop(stopWaitMs)
@@ -412,11 +482,13 @@ export function apply(ctx: Context, config: Config): void {
     if (action === 'stack') {
       const threadId = (args.thread as number | undefined) ?? managed.session.stoppedThreadId()
       if (threadId === undefined) throw new Error('stack requires a stopped thread')
-      const raw = jsonSafe(await managed.session.request('stackTrace', {
-        threadId,
-        startFrame: 0,
-        levels: Math.min(100, (args.max_frames as number | undefined) ?? 20),
-      })) as { stackFrames?: Array<Record<string, unknown>>; totalFrames?: number }
+      const raw = jsonSafe(
+        await managed.session.request('stackTrace', {
+          threadId,
+          startFrame: 0,
+          levels: Math.min(100, (args.max_frames as number | undefined) ?? 20),
+        }),
+      ) as { stackFrames?: Array<Record<string, unknown>>; totalFrames?: number }
       return {
         action,
         session: managed.id,
@@ -433,10 +505,12 @@ export function apply(ctx: Context, config: Config): void {
 
     if (action === 'variables') {
       if (typeof args.ref === 'number') {
-        const raw = jsonSafe(await managed.session.request('variables', {
-          variablesReference: args.ref,
-          count: 100,
-        }))
+        const raw = jsonSafe(
+          await managed.session.request('variables', {
+            variablesReference: args.ref,
+            count: 100,
+          }),
+        )
         return { action, session: managed.id, variables: raw }
       }
       if (typeof args.frame !== 'number') throw new Error('variables requires frame or ref')
@@ -449,10 +523,12 @@ export function apply(ctx: Context, config: Config): void {
           result.push({ scope: scope.name, skipped: true })
           continue
         }
-        const raw = jsonSafe(await managed.session.request('variables', {
-          variablesReference: scope.variablesReference,
-          count: 50,
-        }))
+        const raw = jsonSafe(
+          await managed.session.request('variables', {
+            variablesReference: scope.variablesReference,
+            count: 50,
+          }),
+        )
         result.push({ scope: scope.name, variables: raw })
       }
       return { action, session: managed.id, scopes: result }
@@ -462,11 +538,13 @@ export function apply(ctx: Context, config: Config): void {
       if (typeof args.expression !== 'string' || !args.expression) {
         throw new Error('evaluate requires expression')
       }
-      const raw = jsonSafe(await managed.session.request('evaluate', {
-        expression: args.expression,
-        ...(typeof args.frame === 'number' ? { frameId: args.frame } : {}),
-        context: 'repl',
-      }))
+      const raw = jsonSafe(
+        await managed.session.request('evaluate', {
+          expression: args.expression,
+          ...(typeof args.frame === 'number' ? { frameId: args.frame } : {}),
+          context: 'repl',
+        }),
+      )
       return { action, session: managed.id, result: raw }
     }
 
@@ -508,20 +586,28 @@ export function apply(ctx: Context, config: Config): void {
     if (!adapter) {
       throw new Error(`unknown adapter "${String(args.adapter)}"; run debug_control adapters first`)
     }
-    if (typeof args.program !== 'string' || !args.program) throw new Error('prepare_launch requires program')
+    if (typeof args.program !== 'string' || !args.program)
+      throw new Error('prepare_launch requires program')
     if (sessionsOf(agent).size >= maxSessions) {
       throw new Error(`at most ${maxSessions} debug sessions per agent; terminate one first`)
     }
 
     const program = await containedPath(args.program, agent, exec.signal, 'file')
-    const cwd = typeof args.cwd === 'string' && args.cwd
-      ? await containedPath(args.cwd, agent, exec.signal, 'directory')
-      : ctx.fs.processPath(await workspaceOf(agent, exec.signal))
+    const cwd =
+      typeof args.cwd === 'string' && args.cwd
+        ? await containedPath(args.cwd, agent, exec.signal, 'directory')
+        : ctx.fs.processPath(await workspaceOf(agent, exec.signal))
     const debuggeeArgs = ((args.args ?? []) as unknown[]).map(String)
     const stopOnEntry = args.stop_on_entry !== false
-    const env = args.env && typeof args.env === 'object'
-      ? Object.fromEntries(Object.entries(args.env as Record<string, unknown>).map(([key, value]) => [key, String(value)]))
-      : undefined
+    const env =
+      args.env && typeof args.env === 'object'
+        ? Object.fromEntries(
+            Object.entries(args.env as Record<string, unknown>).map(([key, value]) => [
+              key,
+              String(value),
+            ]),
+          )
+        : undefined
 
     const grouped = groupBreakpoints((args.breakpoints ?? []) as SourceBreakpoint[])
     const resolvedBreakpoints = new Map<string, Array<{ line: number; condition?: string }>>()
@@ -538,9 +624,10 @@ export function apply(ctx: Context, config: Config): void {
     const proposal = ctx.proposals.create(agent, {
       kind: 'debug-launch',
       title: `Launch ${args.program} under the ${adapter.id} debugger`,
-      summary: `Start the ${adapter.id} debug adapter and launch ${program} with `
-        + `${debuggeeArgs.length} argument(s) in ${cwd}. The session allows breakpoints, stepping, and `
-        + 'expression evaluation inside the debuggee process.',
+      summary:
+        `Start the ${adapter.id} debug adapter and launch ${program} with ` +
+        `${debuggeeArgs.length} argument(s) in ${cwd}. The session allows breakpoints, stepping, and ` +
+        'expression evaluation inside the debuggee process.',
       effects: [
         {
           type: 'spawn-debug-adapter',
@@ -551,13 +638,23 @@ export function apply(ctx: Context, config: Config): void {
           type: 'launch-debuggee',
           target: program,
           summary: `Launch the program under the debugger in ${cwd}`,
-          details: jsonSafe({ launch: launchArguments, breakpoints: [...resolvedBreakpoints.keys()] }),
+          details: jsonSafe({
+            launch: launchArguments,
+            breakpoints: [...resolvedBreakpoints.keys()],
+          }),
         },
       ],
       signal: exec.signal,
       commit: async (commitExec) => {
         const started = await startSession(
-          agent, adapter, 'launch', launchArguments, resolvedBreakpoints, program, stopOnEntry, commitExec,
+          agent,
+          adapter,
+          'launch',
+          launchArguments,
+          resolvedBreakpoints,
+          program,
+          stopOnEntry,
+          commitExec,
         )
         return {
           summary: `Debug session ${started.id} launched (${started.status.state}).`,
@@ -581,7 +678,9 @@ export function apply(ctx: Context, config: Config): void {
     if (!adapter.supportsAttach) throw new Error(`adapter "${adapter.id}" does not support attach`)
     const attachConfig = args.config
     if (!attachConfig || typeof attachConfig !== 'object' || !Object.keys(attachConfig).length) {
-      throw new Error('prepare_attach requires a non-empty config (for example { pid } or { connect: { host, port } })')
+      throw new Error(
+        'prepare_attach requires a non-empty config (for example { pid } or { connect: { host, port } })',
+      )
     }
     if (sessionsOf(agent).size >= maxSessions) {
       throw new Error(`at most ${maxSessions} debug sessions per agent; terminate one first`)
@@ -594,8 +693,9 @@ export function apply(ctx: Context, config: Config): void {
     const proposal = ctx.proposals.create(agent, {
       kind: 'debug-attach',
       title: `Attach the ${adapter.id} debugger`,
-      summary: `Start the ${adapter.id} debug adapter and attach it with the exact configuration shown in the `
-        + 'effects. The session allows breakpoints, stepping, and expression evaluation inside the attached process.',
+      summary:
+        `Start the ${adapter.id} debug adapter and attach it with the exact configuration shown in the ` +
+        'effects. The session allows breakpoints, stepping, and expression evaluation inside the attached process.',
       effects: [
         {
           type: 'spawn-debug-adapter',
@@ -612,7 +712,14 @@ export function apply(ctx: Context, config: Config): void {
       signal: exec.signal,
       commit: async (commitExec) => {
         const started = await startSession(
-          agent, adapter, 'attach', attachArguments, new Map(), undefined, false, commitExec,
+          agent,
+          adapter,
+          'attach',
+          attachArguments,
+          new Map(),
+          undefined,
+          false,
+          commitExec,
         )
         return {
           summary: `Debug session ${started.id} attached (${started.status.state}).`,

@@ -41,7 +41,7 @@ function isBlockedIpv4(value: number): boolean {
   return BLOCKED_V4.some(([base, bits]) => {
     const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0
     // >>> 0 keeps both sides unsigned; bitwise AND coerces to signed int32.
-    return ((value & mask) >>> 0) === ((base & mask) >>> 0)
+    return (value & mask) >>> 0 === (base & mask) >>> 0
   })
 }
 
@@ -128,9 +128,7 @@ const LOCAL_NAME_SUFFIXES = ['.localhost', '.local', '.internal', '.lan', '.home
  */
 export function isPrivateHost(hostname: string): boolean {
   // WHATWG URL keeps brackets on IPv6 hostnames.
-  const host = hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1)
-    : hostname
+  const host = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
   if (host === 'localhost') return true
   const lower = host.toLowerCase()
   if (LOCAL_NAME_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return true

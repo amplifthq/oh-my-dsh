@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  discoverServers,
-  registerRefactorServers,
-} from '../dist/packages/lsp-auto/src/index.js'
+import { discoverServers, registerRefactorServers } from '../dist/packages/lsp-auto/src/index.js'
 
 test('bundled language servers are discovered with non-overlapping routes', () => {
   const servers = discoverServers()
@@ -30,14 +27,20 @@ test('discovered servers register with and dispose from the refactor seam', () =
       extensionToLanguage: { '.py': 'python' },
     },
   }
-  const dispose = registerRefactorServers({
-    registerServer(id, config) {
-      registrations.push([id, config])
-      return () => disposals.push(id)
+  const dispose = registerRefactorServers(
+    {
+      registerServer(id, config) {
+        registrations.push([id, config])
+        return () => disposals.push(id)
+      },
     },
-  }, servers)
+    servers,
+  )
 
-  assert.deepEqual(registrations.map(([id]) => id), ['typescript', 'python'])
+  assert.deepEqual(
+    registrations.map(([id]) => id),
+    ['typescript', 'python'],
+  )
   dispose()
   assert.deepEqual(disposals, ['python', 'typescript'])
 })
@@ -45,15 +48,22 @@ test('discovered servers register with and dispose from the refactor seam', () =
 test('partial refactor server registration rolls back when a later server fails', () => {
   const disposals = []
   let calls = 0
-  assert.throws(() => registerRefactorServers({
-    registerServer(id) {
-      calls += 1
-      if (calls === 2) throw new Error('duplicate route')
-      return () => disposals.push(id)
-    },
-  }, {
-    first: { command: 'first', extensionToLanguage: { '.a': 'a' } },
-    second: { command: 'second', extensionToLanguage: { '.b': 'b' } },
-  }), /duplicate route/)
+  assert.throws(
+    () =>
+      registerRefactorServers(
+        {
+          registerServer(id) {
+            calls += 1
+            if (calls === 2) throw new Error('duplicate route')
+            return () => disposals.push(id)
+          },
+        },
+        {
+          first: { command: 'first', extensionToLanguage: { '.a': 'a' } },
+          second: { command: 'second', extensionToLanguage: { '.b': 'b' } },
+        },
+      ),
+    /duplicate route/,
+  )
   assert.deepEqual(disposals, ['first'])
 })

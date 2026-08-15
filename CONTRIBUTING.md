@@ -10,9 +10,12 @@ Requires Node.js `^22.19.0` or `>=24.0.0`, and pnpm.
 
 ```sh
 pnpm install
+pnpm format:check
 pnpm typecheck
 pnpm test
 ```
+
+Commits run Prettier on staged files, then typecheck and tests. `pnpm format` rewrites the tree.
 
 `pnpm test` builds, then runs `tests/*.test.mjs`.
 

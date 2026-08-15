@@ -98,7 +98,10 @@ export function normalizeWorkspaceEdit(value: unknown): NormalizedDocumentEdit[]
       if ('kind' in change || !('textDocument' in change)) {
         throw new Error('WorkspaceEdit resource operations are not supported')
       }
-      const document = record(change.textDocument, `WorkspaceEdit.documentChanges[${index}].textDocument`)
+      const document = record(
+        change.textDocument,
+        `WorkspaceEdit.documentChanges[${index}].textDocument`,
+      )
       const uri = fileUri(document.uri, `WorkspaceEdit.documentChanges[${index}].textDocument.uri`)
       if (seen.has(uri)) throw new Error(`duplicate textDocument edit for ${uri}`)
       seen.add(uri)
@@ -128,10 +131,10 @@ function jsOffsetForCharacter(line: string, character: number, encoding: Positio
   if (encoding === 'utf-16') {
     if (character > line.length) throw new Error('LSP character is beyond the end of the line')
     if (
-      character > 0
-      && character < line.length
-      && /[\uD800-\uDBFF]/.test(line[character - 1] as string)
-      && /[\uDC00-\uDFFF]/.test(line[character] as string)
+      character > 0 &&
+      character < line.length &&
+      /[\uD800-\uDBFF]/.test(line[character - 1] as string) &&
+      /[\uDC00-\uDFFF]/.test(line[character] as string)
     ) {
       throw new Error('LSP UTF-16 character splits a surrogate pair')
     }
@@ -142,9 +145,7 @@ function jsOffsetForCharacter(line: string, character: number, encoding: Positio
   let jsOffset = 0
   for (const codePoint of line) {
     if (units === character) return jsOffset
-    const width = encoding === 'utf-8'
-      ? Buffer.byteLength(codePoint, 'utf8')
-      : 1
+    const width = encoding === 'utf-8' ? Buffer.byteLength(codePoint, 'utf8') : 1
     if (units + width > character) {
       throw new Error(`LSP ${encoding} character splits a code point`)
     }
@@ -180,11 +181,12 @@ export function convertPositionEncoding(
   if (lineStart === undefined) throw new Error('LSP line is beyond the end of the document')
   const absolute = absoluteOffset(content, starts, position, from)
   const prefix = content.slice(lineStart, absolute)
-  const character = to === 'utf-16'
-    ? prefix.length
-    : to === 'utf-8'
-      ? Buffer.byteLength(prefix, 'utf8')
-      : [...prefix].length
+  const character =
+    to === 'utf-16'
+      ? prefix.length
+      : to === 'utf-8'
+        ? Buffer.byteLength(prefix, 'utf8')
+        : [...prefix].length
   return { line: position.line, character }
 }
 
@@ -194,29 +196,30 @@ export function applyTextEdits(
   encoding: PositionEncoding,
 ): string {
   const starts = lineStartOffsets(content)
-  const resolved = textEdits.map((edit) => {
-    const start = absoluteOffset(content, starts, edit.range.start, encoding)
-    const end = absoluteOffset(content, starts, edit.range.end, encoding)
-    if (end < start) throw new Error('text edit range end precedes start')
-    return { start, end, newText: edit.newText }
-  }).sort((left, right) => left.start - right.start || left.end - right.end)
+  const resolved = textEdits
+    .map((edit) => {
+      const start = absoluteOffset(content, starts, edit.range.start, encoding)
+      const end = absoluteOffset(content, starts, edit.range.end, encoding)
+      if (end < start) throw new Error('text edit range end precedes start')
+      return { start, end, newText: edit.newText }
+    })
+    .sort((left, right) => left.start - right.start || left.end - right.end)
 
   for (let index = 1; index < resolved.length; index += 1) {
     const previous = resolved[index - 1] as (typeof resolved)[number]
     const current = resolved[index] as (typeof resolved)[number]
     if (
-      current.start < previous.end
-      || (
-        current.start === previous.start
-        && current.end === previous.end
-      )
+      current.start < previous.end ||
+      (current.start === previous.start && current.end === previous.end)
     ) {
       throw new Error('WorkspaceEdit contains overlapping text edits')
     }
   }
 
   let output = content
-  for (const edit of [...resolved].sort((left, right) => right.start - left.start || right.end - left.end)) {
+  for (const edit of [...resolved].sort(
+    (left, right) => right.start - left.start || right.end - left.end,
+  )) {
     output = `${output.slice(0, edit.start)}${edit.newText}${output.slice(edit.end)}`
   }
   return output

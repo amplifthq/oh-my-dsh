@@ -4,7 +4,12 @@
   "description": "Stale-safe hash-anchored range and block editing for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "editing", "hashline"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "editing",
+    "hashline"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

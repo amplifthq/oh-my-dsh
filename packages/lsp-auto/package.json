@@ -4,7 +4,11 @@
   "description": "Batteries-included LSP provider discovery for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "lsp"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "lsp"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

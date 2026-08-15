@@ -27,7 +27,10 @@ test('proposal ids are monotonic and proposals are isolated by agent', () => {
 
   assert.equal(first.id, 'proposal-1')
   assert.equal(second.id, 'proposal-2')
-  assert.deepEqual(store.list(firstAgent).map((proposal) => proposal.id), ['proposal-1', 'proposal-2'])
+  assert.deepEqual(
+    store.list(firstAgent).map((proposal) => proposal.id),
+    ['proposal-1', 'proposal-2'],
+  )
   assert.equal(store.list(secondAgent).length, 1)
 })
 
@@ -45,9 +48,12 @@ test('successful apply removes the proposal', async () => {
 test('failed apply remains visible but cannot be retried', async () => {
   const store = new ProposalStore()
   const agent = {}
-  const proposal = store.create(agent, input(async () => {
-    throw new Error('stale')
-  }))
+  const proposal = store.create(
+    agent,
+    input(async () => {
+      throw new Error('stale')
+    }),
+  )
 
   await assert.rejects(store.apply(agent, proposal.id, {}), /stale/)
   assert.equal(store.show(agent, proposal.id)?.status, 'failed')
@@ -77,17 +83,19 @@ test('approval reason repeats the exact reviewed effects', () => {
     kind: 'mcp-activate',
     title: 'Activate docs',
     summary: 'Start the reviewed server.',
-    effects: [{
-      type: 'mcp-server-activation',
-      target: 'docs',
-      summary: 'Start /usr/local/bin/node.',
-      details: {
-        endpoint: '/usr/local/bin/node',
-        argumentPreview: ['server.js', '--token', '[redacted]'],
-        cwd: '/workspace',
-        configPath: '/workspace/.mcp.json',
+    effects: [
+      {
+        type: 'mcp-server-activation',
+        target: 'docs',
+        summary: 'Start /usr/local/bin/node.',
+        details: {
+          endpoint: '/usr/local/bin/node',
+          argumentPreview: ['server.js', '--token', '[redacted]'],
+          cwd: '/workspace',
+          configPath: '/workspace/.mcp.json',
+        },
       },
-    }],
+    ],
     status: 'pending',
   })
 
@@ -102,9 +110,15 @@ test('discard refuses to hide an applying proposal', async () => {
   const store = new ProposalStore()
   const agent = {}
   let finish
-  const proposal = store.create(agent, input(() => new Promise((resolve) => {
-    finish = resolve
-  })))
+  const proposal = store.create(
+    agent,
+    input(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    ),
+  )
   const applying = store.apply(agent, proposal.id, {})
   await Promise.resolve()
 

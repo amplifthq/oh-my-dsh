@@ -82,9 +82,9 @@ export function apply(ctx: Context, config: Config): void {
     order: 115,
     text: config.allowPrivateNetwork
       ? 'Prefer the web_fetch tool over shell curl/wget for retrieving web pages.'
-      : 'Prefer the web_fetch tool over shell curl/wget for retrieving public web pages. '
-        + 'web_fetch blocks private and internal network destinations by design; use shell '
-        + 'tools for localhost and in-workspace services.',
+      : 'Prefer the web_fetch tool over shell curl/wget for retrieving public web pages. ' +
+        'web_fetch blocks private and internal network destinations by design; use shell ' +
+        'tools for localhost and in-workspace services.',
   })
 
   if (config.guardShellFetch === true) {
@@ -98,8 +98,9 @@ export function apply(ctx: Context, config: Config): void {
       const listed = assessment.publicUrls.slice(0, 3).join(', ')
       return {
         kind: 'ask',
-        reason: `Shell fetch of a public URL while the web_fetch tool is disabled: ${listed}. `
-          + 'Approve once, or re-enable web fetch (unset OMD_DISABLE_WEB_FETCH) for guarded retrieval.',
+        reason:
+          `Shell fetch of a public URL while the web_fetch tool is disabled: ${listed}. ` +
+          'Approve once, or re-enable web fetch (unset OMD_DISABLE_WEB_FETCH) for guarded retrieval.',
       }
     })
   }

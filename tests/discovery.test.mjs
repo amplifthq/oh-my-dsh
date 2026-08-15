@@ -34,7 +34,10 @@ test('discovers global and always-on Cursor instructions but skips scoped rules'
       '---\nglobs: "*.ts"\nalwaysApply: false\n---\nscoped rule',
     )
     const sources = discoverInstructions(project, home)
-    assert.deepEqual(sources.map((source) => source.body), ['global rule', 'project rule'])
+    assert.deepEqual(
+      sources.map((source) => source.body),
+      ['global rule', 'project rule'],
+    )
     const rendered = renderInstructions(sources, project, 10_000, home)
     assert.match(rendered, /global rule/)
     assert.match(rendered, /project rule/)
@@ -49,15 +52,18 @@ test('imports project MCP definitions without expanding environment placeholders
   const previous = process.env.OMD_TEST_TOKEN
   process.env.OMD_TEST_TOKEN = 'secret-value'
   try {
-    writeFileSync(join(project, '.mcp.json'), JSON.stringify({
-      mcpServers: {
-        docs: {
-          command: 'node',
-          args: ['server.js'],
-          env: { TOKEN: '${env:OMD_TEST_TOKEN}' },
+    writeFileSync(
+      join(project, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          docs: {
+            command: 'node',
+            args: ['server.js'],
+            env: { TOKEN: '${env:OMD_TEST_TOKEN}' },
+          },
         },
-      },
-    }))
+      }),
+    )
     const servers = discoverMcpServers(project, home)
     assert.equal(servers.docs.command, 'node')
     assert.deepEqual(servers.docs.args, ['server.js'])
@@ -73,24 +79,36 @@ test('imports project MCP definitions without expanding environment placeholders
 test('lazy MCP catalog excludes untrusted project servers and labels trusted sources', () => {
   const { root, home, project } = fixture()
   try {
-    writeFileSync(join(home, '.claude.json'), JSON.stringify({
-      mcpServers: {
-        userDocs: { command: 'node', args: ['user.js'] },
-      },
-    }))
-    writeFileSync(join(project, '.mcp.json'), JSON.stringify({
-      mcpServers: {
-        projectDocs: { command: 'node', args: ['project.js'] },
-      },
-    }))
+    writeFileSync(
+      join(home, '.claude.json'),
+      JSON.stringify({
+        mcpServers: {
+          userDocs: { command: 'node', args: ['user.js'] },
+        },
+      }),
+    )
+    writeFileSync(
+      join(project, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          projectDocs: { command: 'node', args: ['project.js'] },
+        },
+      }),
+    )
 
     const untrusted = discoverMcpCatalog(project, home, false)
-    assert.deepEqual(untrusted.map((server) => server.name), ['userDocs'])
+    assert.deepEqual(
+      untrusted.map((server) => server.name),
+      ['userDocs'],
+    )
     assert.equal(untrusted[0].source, 'user')
     assert.equal(untrusted[0].configPath, join(home, '.claude.json'))
 
     const trusted = discoverMcpCatalog(project, home, true)
-    assert.deepEqual(trusted.map((server) => server.name), ['projectDocs', 'userDocs'])
+    assert.deepEqual(
+      trusted.map((server) => server.name),
+      ['projectDocs', 'userDocs'],
+    )
     const projectServer = trusted.find((server) => server.name === 'projectDocs')
     assert.equal(projectServer.source, 'project')
     assert.equal(projectServer.configPath, join(project, '.mcp.json'))

@@ -33,7 +33,10 @@ export interface AdapterProbeHost {
   probeCommand(argv: string[]): Promise<boolean>
 }
 
-async function resolveOrUndefined(host: AdapterProbeHost, command: string): Promise<string | undefined> {
+async function resolveOrUndefined(
+  host: AdapterProbeHost,
+  command: string,
+): Promise<string | undefined> {
   try {
     return await host.resolveExecutable(command)
   } catch {
@@ -108,7 +111,13 @@ export async function discoverAdapters(
 export function mergeLaunchArguments(
   adapter: DebugAdapter,
   userConfig: Record<string, unknown>,
-  validated: { program: string; args: string[]; cwd: string; stopOnEntry: boolean; env?: Record<string, string> },
+  validated: {
+    program: string
+    args: string[]
+    cwd: string
+    stopOnEntry: boolean
+    env?: Record<string, string>
+  },
 ): Record<string, unknown> {
   return {
     ...adapter.launchDefaults,

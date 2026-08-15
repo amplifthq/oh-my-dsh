@@ -17,13 +17,10 @@ test('anchored range replacement verifies and replaces inclusive lines', () => {
 test('stale anchors fail without changing content', () => {
   const source = 'alpha\nchanged'
   assert.throws(
-    () => replaceAnchoredRange(
-      source,
-      `2:${lineHash('beta')}`,
-      `2:${lineHash('beta')}`,
-      'new',
-      [`2:${lineHash('beta')}`],
-    ),
+    () =>
+      replaceAnchoredRange(source, `2:${lineHash('beta')}`, `2:${lineHash('beta')}`, 'new', [
+        `2:${lineHash('beta')}`,
+      ]),
     /stale anchor/,
   )
 })
@@ -33,13 +30,12 @@ test('interior changes invalidate a previously read range', () => {
   const staleMiddle = `2:${lineHash('middle')}`
   const end = `3:${lineHash('end')}`
   assert.throws(
-    () => replaceAnchoredRange(
-      'start\nchanged\nend',
-      start,
-      end,
-      'replacement',
-      [start, staleMiddle, end],
-    ),
+    () =>
+      replaceAnchoredRange('start\nchanged\nend', start, end, 'replacement', [
+        start,
+        staleMiddle,
+        end,
+      ]),
     /stale anchor/,
   )
 })

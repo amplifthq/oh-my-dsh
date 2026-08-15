@@ -59,7 +59,10 @@ interface PendingRequest {
 }
 
 function body(message: { body?: unknown }): Record<string, unknown> {
-  return (message.body && typeof message.body === 'object' ? message.body : {}) as Record<string, unknown>
+  return (message.body && typeof message.body === 'object' ? message.body : {}) as Record<
+    string,
+    unknown
+  >
 }
 
 export class DapSessionError extends Error {}
@@ -120,7 +123,8 @@ export class DapSession {
   }
 
   request(command: string, args?: unknown, timeoutMs?: number): Promise<unknown> {
-    if (this.closed) return Promise.reject(new DapSessionError('debug adapter connection is closed'))
+    if (this.closed)
+      return Promise.reject(new DapSessionError('debug adapter connection is closed'))
     const seq = ++this.seq
     const message: DapRequestMessage = { seq, type: 'request', command }
     if (args !== undefined) message.arguments = args
@@ -129,7 +133,11 @@ export class DapSession {
     const promise = new Promise<unknown>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(seq)
-        reject(new DapSessionError(`DAP ${command} timed out after ${timeoutMs ?? this.options.requestTimeoutMs}ms`))
+        reject(
+          new DapSessionError(
+            `DAP ${command} timed out after ${timeoutMs ?? this.options.requestTimeoutMs}ms`,
+          ),
+        )
       }, timeoutMs ?? this.options.requestTimeoutMs)
       this.pending.set(seq, {
         command,
@@ -146,9 +154,7 @@ export class DapSession {
     try {
       this.transport.write(encodeDapMessage(message))
     } catch (error) {
-      this.pending.get(seq)?.reject(
-        error instanceof Error ? error : new Error(String(error)),
-      )
+      this.pending.get(seq)?.reject(error instanceof Error ? error : new Error(String(error)))
       this.pending.delete(seq)
     }
     return promise
@@ -160,21 +166,30 @@ export class DapSession {
    * `configurationDone`, because adapters like debugpy answer launch only
    * once configuration finishes.
    */
-  async start(plan: DapStartPlan, timeoutMs: number): Promise<{
+  async start(
+    plan: DapStartPlan,
+    timeoutMs: number,
+  ): Promise<{
     breakpoints: Array<{ path: string; verified: unknown }>
   }> {
     const deadline = new DapDeadline(timeoutMs)
-    this.capabilities = ((await deadline.race(this.request('initialize', {
-      clientID: 'oh-my-dsh',
-      clientName: 'oh-my-dsh',
-      adapterID: 'oh-my-dsh',
-      pathFormat: 'path',
-      linesStartAt1: true,
-      columnsStartAt1: true,
-      supportsRunInTerminalRequest: false,
-      supportsStartDebuggingRequest: false,
-      locale: 'en',
-    }, timeoutMs))) ?? {}) as Record<string, unknown>
+    this.capabilities = ((await deadline.race(
+      this.request(
+        'initialize',
+        {
+          clientID: 'oh-my-dsh',
+          clientName: 'oh-my-dsh',
+          adapterID: 'oh-my-dsh',
+          pathFormat: 'path',
+          linesStartAt1: true,
+          columnsStartAt1: true,
+          supportsRunInTerminalRequest: false,
+          supportsStartDebuggingRequest: false,
+          locale: 'en',
+        },
+        timeoutMs,
+      ),
+    )) ?? {}) as Record<string, unknown>
 
     const startResponse = this.request(plan.request, plan.arguments, timeoutMs)
     startResponse.catch(() => {})
@@ -183,18 +198,22 @@ export class DapSession {
     const breakpointResults: Array<{ path: string; verified: unknown }> = []
     for (const file of plan.breakpoints) {
       const result = body({
-        body: await deadline.race(this.request('setBreakpoints', {
-          source: { path: file.path },
-          breakpoints: file.breakpoints,
-          lines: file.breakpoints.map((breakpoint) => breakpoint.line),
-        })),
+        body: await deadline.race(
+          this.request('setBreakpoints', {
+            source: { path: file.path },
+            breakpoints: file.breakpoints,
+            lines: file.breakpoints.map((breakpoint) => breakpoint.line),
+          }),
+        ),
       })
       breakpointResults.push({ path: file.path, verified: result.breakpoints ?? [] })
     }
     if (this.capabilities.supportsConfigurationDoneRequest !== false) {
-      await deadline.race(this.request('configurationDone', {}).catch((error: unknown) => {
-        if (this.capabilities.supportsConfigurationDoneRequest === true) throw error
-      }))
+      await deadline.race(
+        this.request('configurationDone', {}).catch((error: unknown) => {
+          if (this.capabilities.supportsConfigurationDoneRequest === true) throw error
+        }),
+      )
     }
     await deadline.race(startResponse)
     this.started = true
@@ -229,7 +248,8 @@ export class DapSession {
 
   private waitForInitialized(): Promise<void> {
     if (this.sawInitialized) return Promise.resolve()
-    if (this.closed) return Promise.reject(new DapSessionError('debug adapter closed before initialization'))
+    if (this.closed)
+      return Promise.reject(new DapSessionError('debug adapter closed before initialization'))
     return new Promise((resolve) => this.initializedListeners.push(resolve))
   }
 
@@ -254,9 +274,11 @@ export class DapSession {
     this.pending.delete(response.request_seq)
     if (response.success) pending.resolve(response.body)
     else {
-      pending.reject(new DapSessionError(
-        `DAP ${pending.command} failed: ${response.message ?? 'unknown adapter error'}`,
-      ))
+      pending.reject(
+        new DapSessionError(
+          `DAP ${pending.command} failed: ${response.message ?? 'unknown adapter error'}`,
+        ),
+      )
     }
   }
 
@@ -302,7 +324,9 @@ export class DapSession {
       const category = typeof data.category === 'string' ? data.category : 'console'
       if (category === 'telemetry') return
       const text = typeof data.output === 'string' ? data.output : ''
-      this.appendOutput(category === 'stdout' || category === 'console' ? text : `[${category}] ${text}`)
+      this.appendOutput(
+        category === 'stdout' || category === 'console' ? text : `[${category}] ${text}`,
+      )
     }
   }
 

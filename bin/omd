@@ -83,7 +83,10 @@ function writeProfile(name, bundles) {
       ...(current.dependencies || {}),
       'oh-my-dsh': packageSpec(),
       ...Object.fromEntries(
-        profilePluginDependencies.map((dependency) => [dependency, manifest.dependencies[dependency]]),
+        profilePluginDependencies.map((dependency) => [
+          dependency,
+          manifest.dependencies[dependency],
+        ]),
       ),
     },
     dsh: {
@@ -148,8 +151,12 @@ function ensureProfile(name) {
 function dshBin() {
   if (process.env.OMD_DSH) {
     const candidate = resolve(process.env.OMD_DSH, 'apps', 'cli', 'src', 'bin.ts')
-    if (!existsSync(candidate)) fail(`OMD_DSH is not a DeepSeek Harness checkout: ${process.env.OMD_DSH}`)
-    return { command: process.env.OMD_PNPM || 'pnpm', prefix: ['-C', resolve(process.env.OMD_DSH), 'dsh'] }
+    if (!existsSync(candidate))
+      fail(`OMD_DSH is not a DeepSeek Harness checkout: ${process.env.OMD_DSH}`)
+    return {
+      command: process.env.OMD_PNPM || 'pnpm',
+      prefix: ['-C', resolve(process.env.OMD_DSH), 'dsh'],
+    }
   }
   const packagePath = require.resolve('@deepseek-ai/dsh/package.json')
   return {
@@ -167,15 +174,21 @@ function runDsh(profile, args) {
 
 function doctorWebFetch() {
   if (process.env.OMD_DISABLE_WEB_FETCH === '1') {
-    console.log('web fetch: disabled (OMD_DISABLE_WEB_FETCH=1); shell fetches of public URLs prompt for approval')
+    console.log(
+      'web fetch: disabled (OMD_DISABLE_WEB_FETCH=1); shell fetches of public URLs prompt for approval',
+    )
     return
   }
   const provider = process.env.DSH_WEB_FETCH_PROVIDER || 'omd-safe'
   if (provider === 'omd-safe') {
     const allowPrivate = process.env.OMD_WEB_FETCH_ALLOW_PRIVATE === '1'
-    console.log(`web fetch: enabled, hardened provider (private networks ${allowPrivate ? 'ALLOWED via OMD_WEB_FETCH_ALLOW_PRIVATE' : 'blocked'})`)
+    console.log(
+      `web fetch: enabled, hardened provider (private networks ${allowPrivate ? 'ALLOWED via OMD_WEB_FETCH_ALLOW_PRIVATE' : 'blocked'})`,
+    )
   } else if (provider === 'http') {
-    console.log('web fetch: enabled, upstream http provider — WARNING: no private-network (SSRF) protection')
+    console.log(
+      'web fetch: enabled, upstream http provider — WARNING: no private-network (SSRF) protection',
+    )
   } else {
     console.log(`web fetch: enabled, custom provider "${provider}"`)
   }
@@ -279,7 +292,9 @@ function trust(args) {
   const config = readOmdConfig()
   const trusted = new Set(
     Array.isArray(config.trustedWorkspaces)
-      ? config.trustedWorkspaces.filter((item) => typeof item === 'string').map((item) => resolve(item))
+      ? config.trustedWorkspaces
+          .filter((item) => typeof item === 'string')
+          .map((item) => resolve(item))
       : [],
   )
   if (action === 'list') {
@@ -297,7 +312,9 @@ function trust(args) {
   if (action === 'add') trusted.add(workspace)
   else trusted.delete(workspace)
   writeOmdConfig({ ...config, trustedWorkspaces: [...trusted].sort() })
-  console.log(`omd: ${workspace} ${action === 'add' ? 'trusted' : 'untrusted'}; restart omd to apply.`)
+  console.log(
+    `omd: ${workspace} ${action === 'add' ? 'trusted' : 'untrusted'}; restart omd to apply.`,
+  )
 }
 
 function zstdFrameRanges(bytes) {
@@ -321,9 +338,7 @@ function zstdFrameRanges(bytes) {
     const checksum = (descriptor & 0x04) !== 0
     const dictionaryFlag = descriptor & 0x03
     const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag
-    const contentSizeBytes = contentSizeFlag === 0
-      ? (singleSegment ? 1 : 0)
-      : 1 << contentSizeFlag
+    const contentSizeBytes = contentSizeFlag === 0 ? (singleSegment ? 1 : 0) : 1 << contentSizeFlag
     const remainingHeaderBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes
     if (bytes.length - offset < remainingHeaderBytes) break
     offset += remainingHeaderBytes
@@ -369,7 +384,11 @@ async function usageReport() {
     for (const entry of readdirSync(directory)) {
       const path = join(directory, entry)
       let info
-      try { info = statSync(path) } catch { continue }
+      try {
+        info = statSync(path)
+      } catch {
+        continue
+      }
       if (info.isDirectory()) walk(path)
       else if (info.isFile() && (path.endsWith('.jsonl') || path.endsWith('.jsonl.zstd'))) {
         files.push(path)

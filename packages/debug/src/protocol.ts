@@ -34,10 +34,7 @@ export interface DapEventMessage extends DapProtocolMessage {
 
 export function encodeDapMessage(message: object): Buffer {
   const payload = Buffer.from(JSON.stringify(message), 'utf8')
-  return Buffer.concat([
-    Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`, 'ascii'),
-    payload,
-  ])
+  return Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`, 'ascii'), payload])
 }
 
 const HEADER_TERMINATOR = Buffer.from('\r\n\r\n', 'ascii')
@@ -60,10 +57,13 @@ export class DapDecoder {
         }
         const header = this.buffer.subarray(0, headerEnd).toString('ascii')
         const match = /content-length:\s*(\d+)/i.exec(header)
-        if (!match) throw new Error(`DAP header is missing Content-Length: ${JSON.stringify(header)}`)
+        if (!match)
+          throw new Error(`DAP header is missing Content-Length: ${JSON.stringify(header)}`)
         const length = Number(match[1])
         if (!Number.isSafeInteger(length) || length < 0 || length > this.maxMessageBytes) {
-          throw new Error(`DAP message length ${length} exceeds the ${this.maxMessageBytes}-byte cap`)
+          throw new Error(
+            `DAP message length ${length} exceeds the ${this.maxMessageBytes}-byte cap`,
+          )
         }
         this.expectedLength = length
         this.buffer = this.buffer.subarray(headerEnd + HEADER_TERMINATOR.length)
@@ -73,7 +73,11 @@ export class DapDecoder {
       this.buffer = this.buffer.subarray(this.expectedLength)
       this.expectedLength = undefined
       const parsed: unknown = JSON.parse(payload.toString('utf8'))
-      if (!parsed || typeof parsed !== 'object' || typeof (parsed as { type?: unknown }).type !== 'string') {
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        typeof (parsed as { type?: unknown }).type !== 'string'
+      ) {
         throw new Error('DAP payload is not a protocol message')
       }
       messages.push(parsed as DapProtocolMessage)

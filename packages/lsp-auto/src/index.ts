@@ -12,10 +12,7 @@ import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import type { Context } from '@deepseek-ai/cordis'
 import * as LspStdio from '@deepseek-ai/dsh-lsp-stdio'
-import type {
-  RefactorRuntime,
-  RefactorServerConfig,
-} from '../../refactor/src/index.ts'
+import type { RefactorRuntime, RefactorServerConfig } from '../../refactor/src/index.ts'
 
 export const name = 'omd-lsp-auto'
 export const inject = ['lsp', 'fs', 'subprocess', 'refactors']
@@ -110,19 +107,20 @@ export function discoverServers(): Record<string, ServerConfig> {
     ['--stdio'],
     { '.css': 'css', '.scss': 'scss', '.less': 'less' },
   )
-  bundled(
-    servers,
-    'yaml',
-    'yaml-language-server',
-    'yaml-language-server',
-    ['--stdio'],
-    { '.yaml': 'yaml', '.yml': 'yaml' },
-  )
+  bundled(servers, 'yaml', 'yaml-language-server', 'yaml-language-server', ['--stdio'], {
+    '.yaml': 'yaml',
+    '.yml': 'yaml',
+  })
 
   const external: Array<[string, string, string[], Record<string, string>]> = [
     ['rust', 'rust-analyzer', [], { '.rs': 'rust' }],
     ['go', 'gopls', [], { '.go': 'go' }],
-    ['clang', 'clangd', [], { '.c': 'c', '.h': 'c', '.cc': 'cpp', '.cpp': 'cpp', '.cxx': 'cpp', '.hpp': 'cpp' }],
+    [
+      'clang',
+      'clangd',
+      [],
+      { '.c': 'c', '.h': 'c', '.cc': 'cpp', '.cpp': 'cpp', '.cxx': 'cpp', '.hpp': 'cpp' },
+    ],
     ['swift', 'sourcekit-lsp', [], { '.swift': 'swift' }],
   ]
   for (const [id, command, args, extensionToLanguage] of external) {
@@ -156,9 +154,6 @@ export function registerRefactorServers(
 export function apply(ctx: Context): void {
   const servers = discoverServers()
   if (!Object.keys(servers).length) return
-  ctx.effect(
-    () => registerRefactorServers(ctx.refactors, servers),
-    'omd-lsp-auto.refactor-servers',
-  )
+  ctx.effect(() => registerRefactorServers(ctx.refactors, servers), 'omd-lsp-auto.refactor-servers')
   ctx.plugin(LspStdio, { servers })
 }

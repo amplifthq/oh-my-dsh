@@ -23,15 +23,30 @@ export function commandWords(command: string): string[] {
   let atCommandPosition = true
   for (const token of tokens) {
     if (/^(\s+)$/.test(token)) continue
-    if (token === ';' || token === '&&' || token === '||' || token === '|' || token === '&'
-      || token === '$(' || token === '`' || token === '\n') {
+    if (
+      token === ';' ||
+      token === '&&' ||
+      token === '||' ||
+      token === '|' ||
+      token === '&' ||
+      token === '$(' ||
+      token === '`' ||
+      token === '\n'
+    ) {
       atCommandPosition = true
       continue
     }
     if (atCommandPosition) {
       // Skip leading env assignments (FOO=bar curl …) and sudo-style wrappers.
       if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue
-      if (token === 'sudo' || token === 'env' || token === 'command' || token === 'nohup' || token === 'time') continue
+      if (
+        token === 'sudo' ||
+        token === 'env' ||
+        token === 'command' ||
+        token === 'nohup' ||
+        token === 'time'
+      )
+        continue
       words.push(token.replace(/^.*\//, ''))
       atCommandPosition = false
     }

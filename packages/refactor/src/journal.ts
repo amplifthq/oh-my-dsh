@@ -1,10 +1,4 @@
-import {
-  chmodSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 export interface RefactorJournalFile {
@@ -26,10 +20,7 @@ export interface VersionedFileChange extends RefactorJournalFile {
 }
 
 export interface RefactorApplyOperations {
-  saveJournal(
-    files: VersionedFileChange[],
-    status: RefactorJournal['status'],
-  ): void | Promise<void>
+  saveJournal(files: VersionedFileChange[], status: RefactorJournal['status']): void | Promise<void>
   clearJournal(): void | Promise<void>
   write(
     file: VersionedFileChange,
@@ -55,11 +46,11 @@ function validateJournal(value: unknown): RefactorJournal {
   }
   const raw = value as Record<string, unknown>
   if (
-    raw.version !== 1
-    || typeof raw.id !== 'string'
-    || typeof raw.cwd !== 'string'
-    || (raw.status !== 'applying' && raw.status !== 'rollback-needed')
-    || !Array.isArray(raw.files)
+    raw.version !== 1 ||
+    typeof raw.id !== 'string' ||
+    typeof raw.cwd !== 'string' ||
+    (raw.status !== 'applying' && raw.status !== 'rollback-needed') ||
+    !Array.isArray(raw.files)
   ) {
     throw new Error('invalid refactor journal header')
   }
@@ -69,9 +60,9 @@ function validateJournal(value: unknown): RefactorJournal {
     }
     const file = value as Record<string, unknown>
     if (
-      typeof file.path !== 'string'
-      || typeof file.before !== 'string'
-      || typeof file.after !== 'string'
+      typeof file.path !== 'string' ||
+      typeof file.before !== 'string' ||
+      typeof file.after !== 'string'
     ) {
       throw new Error(`invalid refactor journal file ${index}`)
     }

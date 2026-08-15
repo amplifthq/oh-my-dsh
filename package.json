@@ -55,7 +55,10 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepare": "husky",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -97,6 +100,9 @@
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^24.0.0"
+    "@types/node": "^24.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6"
   }
 }

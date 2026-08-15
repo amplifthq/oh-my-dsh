@@ -37,14 +37,22 @@ export function classifyContentType(contentType: string | null): 'html' | 'text'
   const mime = (contentType ?? '').replace(/;.*$/s, '').trim().toLowerCase()
   if (mime === 'text/html' || mime === 'application/xhtml+xml') return 'html'
   if (mime.startsWith('text/')) return 'text'
-  if (mime === 'application/json' || mime === 'application/xml'
-    || mime.endsWith('+json') || mime.endsWith('+xml')) return 'text'
+  if (
+    mime === 'application/json' ||
+    mime === 'application/xml' ||
+    mime.endsWith('+json') ||
+    mime.endsWith('+xml')
+  )
+    return 'text'
   return undefined
 }
 
 /** Extract the lower-cased `charset` parameter of a `Content-Type`, if any. */
 export function parseCharset(contentType: string | null): string | undefined {
-  return /;\s*charset\s*=\s*"?([^";]+)"?/i.exec(contentType ?? '')?.[1]?.trim().toLowerCase()
+  return /;\s*charset\s*=\s*"?([^";]+)"?/i
+    .exec(contentType ?? '')?.[1]
+    ?.trim()
+    .toLowerCase()
 }
 
 function decoderForCharset(charset: string | undefined): TextDecoder {
@@ -52,7 +60,9 @@ function decoderForCharset(charset: string | undefined): TextDecoder {
   try {
     return new TextDecoder(charset)
   } catch (error) {
-    throw new WebError(`unsupported charset "${charset}"`, 'WEB_UNSUPPORTED_CONTENT_TYPE', { cause: error })
+    throw new WebError(`unsupported charset "${charset}"`, 'WEB_UNSUPPORTED_CONTENT_TYPE', {
+      cause: error,
+    })
   }
 }
 
@@ -69,9 +79,15 @@ function isSameOrigin(a: URL, b: URL): boolean {
  * length, and — unless private networks are allowed — no private or reserved
  * destination decidable without DNS.
  */
-export function validateFetchUrl(input: string, limits: Pick<SafeFetchLimits, 'maxUrlLength' | 'allowPrivateNetwork'>): URL {
+export function validateFetchUrl(
+  input: string,
+  limits: Pick<SafeFetchLimits, 'maxUrlLength' | 'allowPrivateNetwork'>,
+): URL {
   if (input.length > limits.maxUrlLength) {
-    throw new WebError(`URL exceeds the maximum length of ${limits.maxUrlLength}`, 'WEB_INVALID_URL')
+    throw new WebError(
+      `URL exceeds the maximum length of ${limits.maxUrlLength}`,
+      'WEB_INVALID_URL',
+    )
   }
   let url: URL
   try {
@@ -80,7 +96,10 @@ export function validateFetchUrl(input: string, limits: Pick<SafeFetchLimits, 'm
     throw new WebError(`invalid URL: ${input}`, 'WEB_INVALID_URL', { cause: error })
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new WebError(`unsupported URL scheme "${url.protocol}" (only http and https are allowed)`, 'WEB_INVALID_URL')
+    throw new WebError(
+      `unsupported URL scheme "${url.protocol}" (only http and https are allowed)`,
+      'WEB_INVALID_URL',
+    )
   }
   if (url.username.length > 0 || url.password.length > 0) {
     throw new WebError('credentials in URLs are not allowed', 'WEB_BLOCKED_URL')
@@ -100,7 +119,11 @@ export function validateFetchUrl(input: string, limits: Pick<SafeFetchLimits, 'm
  * rejected outright — a public/private mix is an attack shape, not a fallback
  * opportunity.
  */
-export function guardedLookup(hostname: string, options: Parameters<LookupFunction>[1], callback: Parameters<LookupFunction>[2]): void {
+export function guardedLookup(
+  hostname: string,
+  options: Parameters<LookupFunction>[1],
+  callback: Parameters<LookupFunction>[2],
+): void {
   dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
     if (error !== null) {
       callback(error, '', undefined)
@@ -108,7 +131,11 @@ export function guardedLookup(hostname: string, options: Parameters<LookupFuncti
     }
     const list = addresses as LookupAddress[]
     if (list.length === 0) {
-      callback(Object.assign(new Error(`no addresses for ${hostname}`), { code: 'ENOTFOUND' }), '', undefined)
+      callback(
+        Object.assign(new Error(`no addresses for ${hostname}`), { code: 'ENOTFOUND' }),
+        '',
+        undefined,
+      )
       return
     }
     const blocked = list.find((entry) => isForbiddenAddress(entry.address))
@@ -134,9 +161,7 @@ export class SafeFetchProvider implements WebFetchProvider {
   private readonly agent: Agent
 
   constructor(private readonly limits: SafeFetchLimits) {
-    this.agent = new Agent(
-      limits.allowPrivateNetwork ? {} : { connect: { lookup: guardedLookup } },
-    )
+    this.agent = new Agent(limits.allowPrivateNetwork ? {} : { connect: { lookup: guardedLookup } })
   }
 
   /** An anonymous public fetcher is always usable. */
@@ -164,9 +189,12 @@ export class SafeFetchProvider implements WebFetchProvider {
     if (error instanceof WebError) return error
     // undici wraps connect-phase lookup errors; surface a guarded rejection as-is.
     if (error instanceof Error && error.cause instanceof WebError) return error.cause
-    if (timeout.aborted) return new WebError('web fetch timed out', 'WEB_FETCH_TIMEOUT', { cause: error })
+    if (timeout.aborted)
+      return new WebError('web fetch timed out', 'WEB_FETCH_TIMEOUT', { cause: error })
     if (caller?.aborted) return new WebError('web fetch aborted', 'WEB_ABORTED', { cause: error })
-    return new WebError(`web fetch failed: ${String(error)}`, 'WEB_PROVIDER_ERROR', { cause: error })
+    return new WebError(`web fetch failed: ${String(error)}`, 'WEB_PROVIDER_ERROR', {
+      cause: error,
+    })
   }
 
   /** Follow same-origin redirects up to the hop cap, then read the final response. */
@@ -178,12 +206,18 @@ export class SafeFetchProvider implements WebFetchProvider {
       if (isRedirectStatus(response.status)) {
         if (redirectsFollowed >= this.limits.maxRedirects) {
           await response.body?.cancel()
-          throw new WebError(`exceeded the maximum of ${this.limits.maxRedirects} redirects`, 'WEB_REDIRECT_BLOCKED')
+          throw new WebError(
+            `exceeded the maximum of ${this.limits.maxRedirects} redirects`,
+            'WEB_REDIRECT_BLOCKED',
+          )
         }
         const location = response.headers.get('location')
         if (location === null) {
           await response.body?.cancel()
-          throw new WebError(`redirect response (HTTP ${response.status}) without a Location header`, 'WEB_PROVIDER_ERROR')
+          throw new WebError(
+            `redirect response (HTTP ${response.status}) without a Location header`,
+            'WEB_PROVIDER_ERROR',
+          )
         }
         let validatedTarget: URL
         try {
@@ -209,16 +243,16 @@ export class SafeFetchProvider implements WebFetchProvider {
   }
 
   private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
-    return await undiciFetch(url, {
+    return (await undiciFetch(url, {
       method: 'GET',
       redirect: 'manual',
       dispatcher: this.agent,
       headers: {
         'user-agent': this.limits.userAgent,
-        'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
+        accept: 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
       },
       signal,
-    }) as unknown as Response
+    })) as unknown as Response
   }
 
   private async readBody(response: Response, finalUrl: URL): Promise<WebFetchResult> {
@@ -226,7 +260,10 @@ export class SafeFetchProvider implements WebFetchProvider {
     const kind = classifyContentType(contentType)
     if (kind === undefined) {
       await response.body?.cancel()
-      throw new WebError(`unsupported content type "${contentType ?? 'unknown'}"`, 'WEB_UNSUPPORTED_CONTENT_TYPE')
+      throw new WebError(
+        `unsupported content type "${contentType ?? 'unknown'}"`,
+        'WEB_UNSUPPORTED_CONTENT_TYPE',
+      )
     }
     let decoder: TextDecoder
     try {
@@ -252,13 +289,18 @@ export class SafeFetchProvider implements WebFetchProvider {
    * `Content-Length` rejects immediately; an under-reporting stream is cut
    * short and marked truncated rather than rejected.
    */
-  private async readCapped(response: Response): Promise<{ bytes: Uint8Array; truncatedByBytes: boolean }> {
+  private async readCapped(
+    response: Response,
+  ): Promise<{ bytes: Uint8Array; truncatedByBytes: boolean }> {
     const declared = response.headers.get('content-length')
     if (declared !== null) {
       const length = Number(declared)
       if (Number.isFinite(length) && length > this.limits.maxResponseBytes) {
         await response.body?.cancel()
-        throw new WebError(`response exceeds the maximum of ${this.limits.maxResponseBytes} bytes`, 'WEB_FETCH_TOO_LARGE')
+        throw new WebError(
+          `response exceeds the maximum of ${this.limits.maxResponseBytes} bytes`,
+          'WEB_FETCH_TOO_LARGE',
+        )
       }
     }
     if (response.body === null) return { bytes: new Uint8Array(0), truncatedByBytes: false }

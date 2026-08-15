@@ -1,18 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  DapDecoder,
-  encodeDapMessage,
-} from '../dist/packages/debug/src/protocol.js'
+import { DapDecoder, encodeDapMessage } from '../dist/packages/debug/src/protocol.js'
 import { DapSession } from '../dist/packages/debug/src/session.js'
-import {
-  discoverAdapters,
-  mergeLaunchArguments,
-} from '../dist/packages/debug/src/adapters.js'
+import { discoverAdapters, mergeLaunchArguments } from '../dist/packages/debug/src/adapters.js'
 
 test('DAP framing round-trips across arbitrary chunk boundaries', () => {
   const first = encodeDapMessage({ seq: 1, type: 'request', command: 'initialize' })
-  const second = encodeDapMessage({ seq: 2, type: 'event', event: 'stopped', body: { reason: 'entry' } })
+  const second = encodeDapMessage({
+    seq: 2,
+    type: 'event',
+    event: 'stopped',
+    body: { reason: 'entry' },
+  })
   const stream = Buffer.concat([first, second])
   const decoder = new DapDecoder()
   const messages = []
@@ -53,17 +52,20 @@ function scriptedTransport(script) {
   }
   const api = {
     received: [],
-    respond: (request, body, success = true, message = undefined) => deliver({
-      seq: ++adapterSeq,
-      type: 'response',
-      request_seq: request.seq,
-      success,
-      command: request.command,
-      ...(message ? { message } : {}),
-      ...(body !== undefined ? { body } : {}),
-    }),
-    emit: (event, body) => deliver({ seq: ++adapterSeq, type: 'event', event, ...(body !== undefined ? { body } : {}) }),
-    sendRequest: (command, args) => deliver({ seq: ++adapterSeq, type: 'request', command, arguments: args }),
+    respond: (request, body, success = true, message = undefined) =>
+      deliver({
+        seq: ++adapterSeq,
+        type: 'response',
+        request_seq: request.seq,
+        success,
+        command: request.command,
+        ...(message ? { message } : {}),
+        ...(body !== undefined ? { body } : {}),
+      }),
+    emit: (event, body) =>
+      deliver({ seq: ++adapterSeq, type: 'event', event, ...(body !== undefined ? { body } : {}) }),
+    sendRequest: (command, args) =>
+      deliver({ seq: ++adapterSeq, type: 'request', command, arguments: args }),
     close: () => {
       for (const handler of closeHandlers) handler()
     },
@@ -98,7 +100,9 @@ test('start() follows initialize → initialized → breakpoints → configurati
       return
     }
     if (request.command === 'setBreakpoints') {
-      api.respond(request, { breakpoints: request.arguments.breakpoints.map((b) => ({ verified: true, line: b.line })) })
+      api.respond(request, {
+        breakpoints: request.arguments.breakpoints.map((b) => ({ verified: true, line: b.line })),
+      })
       return
     }
     if (request.command === 'configurationDone') {
@@ -108,13 +112,18 @@ test('start() follows initialize → initialized → breakpoints → configurati
     }
   })
   const session = new DapSession(transport, sessionOptions)
-  const started = await session.start({
-    request: 'launch',
-    arguments: { program: '/w/main.py' },
-    breakpoints: [{ path: '/w/main.py', breakpoints: [{ line: 3 }] }],
-  }, 2_000)
+  const started = await session.start(
+    {
+      request: 'launch',
+      arguments: { program: '/w/main.py' },
+      breakpoints: [{ path: '/w/main.py', breakpoints: [{ line: 3 }] }],
+    },
+    2_000,
+  )
   assert.deepEqual(order, ['initialize', 'launch', 'setBreakpoints', 'configurationDone'])
-  assert.deepEqual(started.breakpoints, [{ path: '/w/main.py', verified: [{ verified: true, line: 3 }] }])
+  assert.deepEqual(started.breakpoints, [
+    { path: '/w/main.py', verified: [{ verified: true, line: 3 }] },
+  ])
   const status = session.status()
   assert.equal(status.state, 'stopped')
   assert.equal(status.stopped.reason, 'entry')
@@ -217,10 +226,13 @@ test('discoverAdapters keeps resolvable custom adapters and drops missing ones',
     },
     probeCommand: async () => false,
   }
-  const adapters = await discoverAdapters({
-    mine: { command: 'my-dap', args: ['--stdio'], languages: ['zig'] },
-    ghost: { command: 'missing-dap' },
-  }, host)
+  const adapters = await discoverAdapters(
+    {
+      mine: { command: 'my-dap', args: ['--stdio'], languages: ['zig'] },
+      ghost: { command: 'missing-dap' },
+    },
+    host,
+  )
   assert.deepEqual(Object.keys(adapters), ['mine'])
   assert.deepEqual(adapters.mine.argv, ['/opt/bin/my-dap', '--stdio'])
   assert.equal(adapters.mine.supportsAttach, false)

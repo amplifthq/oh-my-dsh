@@ -29,7 +29,8 @@ export function renderAnchoredLines(content: string, offset = 1, limit = 200): s
   const rendered = lines
     .slice(start - 1, end)
     .map((line, index) => `${start + index}:${lineHash(line)}|${line}`)
-  const footer = end < lines.length ? `\n[${lines.length - end} more lines; resume at offset ${end + 1}]` : ''
+  const footer =
+    end < lines.length ? `\n[${lines.length - end} more lines; resume at offset ${end + 1}]` : ''
   return rendered.join('\n') + footer
 }
 
@@ -53,7 +54,9 @@ function verifyAnchor(lines: string[], anchor: string): number {
   }
   const actual = lineHash(line)
   if (actual !== parsed.hash) {
-    throw new Error(`stale anchor ${anchor}: current line ${parsed.line} has hash ${actual}; read the file again`)
+    throw new Error(
+      `stale anchor ${anchor}: current line ${parsed.line} has hash ${actual}; read the file again`,
+    )
   }
   return index
 }
@@ -70,12 +73,16 @@ export function replaceAnchoredRange(
   const end = verifyAnchor(lines, endAnchor)
   if (end < start) throw new Error('end_anchor must not precede start_anchor')
   if (expectedAnchors.length !== end - start + 1) {
-    throw new Error(`expected_anchors must cover every line in the range (${end - start + 1} anchors required)`)
+    throw new Error(
+      `expected_anchors must cover every line in the range (${end - start + 1} anchors required)`,
+    )
   }
   expectedAnchors.forEach((anchor, offset) => {
     const parsed = parseAnchor(anchor)
     if (parsed.line !== start + offset + 1) {
-      throw new Error('expected_anchors must be consecutive and ordered from start_anchor to end_anchor')
+      throw new Error(
+        'expected_anchors must be consecutive and ordered from start_anchor to end_anchor',
+      )
     }
     verifyAnchor(lines, anchor)
   })
@@ -133,91 +140,109 @@ export function apply(ctx: Context): void {
     text: 'Prefer hash_edit for multi-line changes: read anchors immediately before editing, then replace the exact anchored range. A stale anchor is a safety signal; reread instead of guessing.',
   })
 
-  ctx.tools.register(defineTool({
-    name: 'hash_edit',
-    description:
-      'Read a text file with stale-safe line hashes, replace an inclusive anchored range, '
-      + 'or insert after one anchored line. Anchors are returned by the read operation.',
-    parameters: {
-      operation: {
-        type: 'string',
-        required: true,
-        enum: ['read', 'replace', 'insert_after'],
-        description: 'Operation to perform.',
+  ctx.tools.register(
+    defineTool({
+      name: 'hash_edit',
+      description:
+        'Read a text file with stale-safe line hashes, replace an inclusive anchored range, ' +
+        'or insert after one anchored line. Anchors are returned by the read operation.',
+      parameters: {
+        operation: {
+          type: 'string',
+          required: true,
+          enum: ['read', 'replace', 'insert_after'],
+          description: 'Operation to perform.',
+        },
+        file_path: {
+          type: 'string',
+          required: true,
+          description: 'Absolute path or path relative to the session workspace.',
+        },
+        offset: { type: 'integer', description: 'First one-based line for read (default 1).' },
+        limit: { type: 'integer', description: 'Maximum lines for read (default 200, max 1000).' },
+        start_anchor: {
+          type: 'string',
+          description: 'First line anchor from read, e.g. 12:a1b2c3d4.',
+        },
+        end_anchor: { type: 'string', description: 'Last line anchor from read; inclusive.' },
+        expected_anchors: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Every consecutive line anchor in the replaced range, copied from the latest read.',
+        },
+        anchor: { type: 'string', description: 'Anchor used by insert_after.' },
+        text: {
+          type: 'string',
+          description: 'Replacement or inserted text. Empty text deletes a range.',
+        },
       },
-      file_path: {
-        type: 'string',
-        required: true,
-        description: 'Absolute path or path relative to the session workspace.',
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
       },
-      offset: { type: 'integer', description: 'First one-based line for read (default 1).' },
-      limit: { type: 'integer', description: 'Maximum lines for read (default 200, max 1000).' },
-      start_anchor: { type: 'string', description: 'First line anchor from read, e.g. 12:a1b2c3d4.' },
-      end_anchor: { type: 'string', description: 'Last line anchor from read; inclusive.' },
-      expected_anchors: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Every consecutive line anchor in the replaced range, copied from the latest read.',
-      },
-      anchor: { type: 'string', description: 'Anchor used by insert_after.' },
-      text: { type: 'string', description: 'Replacement or inserted text. Empty text deletes a range.' },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    async execute(args, exec) {
-      const target = await targetFor(ctx, args.file_path, exec)
-      const info = await ctx.fs.stat(target, exec.signal)
-      if (info === undefined) {
-        ctx.emit('fs/observed', target, { kind: 'absent' }, exec)
-        throw new FsError(`file not found: ${target.displayPath}`, 'FS_NOT_FOUND')
-      }
-      if (info.type !== 'file') {
-        throw new FsError(`not a regular file: ${target.displayPath}`, 'FS_NOT_REGULAR_FILE')
-      }
-      const before = await ctx.fs.readText(target, exec.signal)
-      ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
-
-      if (args.operation === 'read') {
-        const offset = args.offset ?? 1
-        const limit = Math.min(args.limit ?? 200, 1000)
-        if (!Number.isInteger(offset) || offset < 1) throw new Error('offset must be a positive integer')
-        if (!Number.isInteger(limit) || limit < 1) throw new Error('limit must be a positive integer')
-        return renderAnchoredLines(before, offset, limit)
-      }
-
-      const intent = await ctx.waterfall('fs/edit-intent', target, exec, () => undefined)
-      const expected: FsWriteIntent = intent === undefined
-        ? { kind: 'replaceIfVersion', version: info.version }
-        : { kind: 'replaceIfVersion', version: intent.version }
-      let after: string
-      if (args.operation === 'replace') {
-        if (!args.start_anchor || !args.end_anchor || !args.expected_anchors) {
-          throw new Error('replace requires start_anchor, end_anchor, and expected_anchors')
+      async execute(args, exec) {
+        const target = await targetFor(ctx, args.file_path, exec)
+        const info = await ctx.fs.stat(target, exec.signal)
+        if (info === undefined) {
+          ctx.emit('fs/observed', target, { kind: 'absent' }, exec)
+          throw new FsError(`file not found: ${target.displayPath}`, 'FS_NOT_FOUND')
         }
-        after = replaceAnchoredRange(
-          before,
-          args.start_anchor,
-          args.end_anchor,
-          args.text ?? '',
-          args.expected_anchors,
-        )
-      } else {
-        if (!args.anchor) throw new Error('insert_after requires anchor')
-        if (args.text === undefined) throw new Error('insert_after requires text')
-        after = insertAfterAnchor(before, args.anchor, args.text)
-      }
+        if (info.type !== 'file') {
+          throw new FsError(`not a regular file: ${target.displayPath}`, 'FS_NOT_REGULAR_FILE')
+        }
+        const before = await ctx.fs.readText(target, exec.signal)
+        ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
 
-      const sandboxPolicy = policy.resolve(exec)
-      try {
-        const outcome = await ctx.fs.writeText(target, after, expected, exec.signal, sandboxPolicy)
-        ctx.emit('fs/observed', target, { kind: 'present', version: outcome.version }, exec)
-      } catch (error) {
-        throw policy.mapError(error, sandboxPolicy)
-      }
-      const changed = Math.max(1, Math.abs(after.split('\n').length - before.split('\n').length))
-      return `Updated ${target.displayPath} (${changed} line delta unit${changed === 1 ? '' : 's'}).`
-    },
-  }))
+        if (args.operation === 'read') {
+          const offset = args.offset ?? 1
+          const limit = Math.min(args.limit ?? 200, 1000)
+          if (!Number.isInteger(offset) || offset < 1)
+            throw new Error('offset must be a positive integer')
+          if (!Number.isInteger(limit) || limit < 1)
+            throw new Error('limit must be a positive integer')
+          return renderAnchoredLines(before, offset, limit)
+        }
+
+        const intent = await ctx.waterfall('fs/edit-intent', target, exec, () => undefined)
+        const expected: FsWriteIntent =
+          intent === undefined
+            ? { kind: 'replaceIfVersion', version: info.version }
+            : { kind: 'replaceIfVersion', version: intent.version }
+        let after: string
+        if (args.operation === 'replace') {
+          if (!args.start_anchor || !args.end_anchor || !args.expected_anchors) {
+            throw new Error('replace requires start_anchor, end_anchor, and expected_anchors')
+          }
+          after = replaceAnchoredRange(
+            before,
+            args.start_anchor,
+            args.end_anchor,
+            args.text ?? '',
+            args.expected_anchors,
+          )
+        } else {
+          if (!args.anchor) throw new Error('insert_after requires anchor')
+          if (args.text === undefined) throw new Error('insert_after requires text')
+          after = insertAfterAnchor(before, args.anchor, args.text)
+        }
+
+        const sandboxPolicy = policy.resolve(exec)
+        try {
+          const outcome = await ctx.fs.writeText(
+            target,
+            after,
+            expected,
+            exec.signal,
+            sandboxPolicy,
+          )
+          ctx.emit('fs/observed', target, { kind: 'present', version: outcome.version }, exec)
+        } catch (error) {
+          throw policy.mapError(error, sandboxPolicy)
+        }
+        const changed = Math.max(1, Math.abs(after.split('\n').length - before.split('\n').length))
+        return `Updated ${target.displayPath} (${changed} line delta unit${changed === 1 ? '' : 's'}).`
+      },
+    }),
+  )
 }

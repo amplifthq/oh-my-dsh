@@ -161,14 +161,16 @@ class PersistentKernel {
     cwd: string,
     private readonly onTerminated: () => void,
   ) {
-    const command = language === 'javascript' ? process.execPath : (process.env.OMD_PYTHON || 'python3')
+    const command =
+      language === 'javascript' ? process.execPath : process.env.OMD_PYTHON || 'python3'
     const args = language === 'javascript' ? ['-e', JAVASCRIPT_BRIDGE] : ['-u', '-c', PYTHON_BRIDGE]
     this.child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
-      env: language === 'javascript'
-        ? {}
-        : { PATH: process.env.PATH ?? '', PYTHONIOENCODING: 'utf-8' },
+      env:
+        language === 'javascript'
+          ? {}
+          : { PATH: process.env.PATH ?? '', PYTHONIOENCODING: 'utf-8' },
     })
     this.child.stdin.on('error', (error) => {
       this.alive = false
@@ -186,7 +188,11 @@ class PersistentKernel {
     })
     this.child.on('exit', (code, signal) => {
       this.alive = false
-      this.fail(new Error(`${language} kernel exited (${signal ?? code ?? 'unknown'})${this.stderr ? `: ${this.stderr}` : ''}`))
+      this.fail(
+        new Error(
+          `${language} kernel exited (${signal ?? code ?? 'unknown'})${this.stderr ? `: ${this.stderr}` : ''}`,
+        ),
+      )
       this.onTerminated()
     })
     const lines = createInterface({ input: this.child.stdout, crlfDelay: Infinity })
@@ -317,74 +323,79 @@ export function apply(ctx: Context, config: Config): void {
     text: 'Use kernel for stateful analysis: JavaScript persists values under `state`, Python persists ordinary variables. A cell can call existing tools with `await tool(name, args)` in JavaScript or `tool(name, args)` in Python. Reset a kernel when stale state could affect correctness.',
   })
 
-  ctx.tools.register(defineTool({
-    name: 'kernel',
-    description:
-      'Run a cell in a session-persistent JavaScript or Python kernel. '
-      + 'JavaScript state persists in `state`; Python globals persist. Both can call dsh tools.',
-    parameters: {
-      language: {
-        type: 'string',
-        required: true,
-        enum: ['javascript', 'python'],
+  ctx.tools.register(
+    defineTool({
+      name: 'kernel',
+      description:
+        'Run a cell in a session-persistent JavaScript or Python kernel. ' +
+        'JavaScript state persists in `state`; Python globals persist. Both can call dsh tools.',
+      parameters: {
+        language: {
+          type: 'string',
+          required: true,
+          enum: ['javascript', 'python'],
+        },
+        code: {
+          type: 'string',
+          description: 'Cell source. Required unless reset is true.',
+        },
+        reset: {
+          type: 'boolean',
+          description: 'Dispose this language kernel and clear its state.',
+        },
       },
-      code: {
-        type: 'string',
-        description: 'Cell source. Required unless reset is true.',
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
       },
-      reset: {
-        type: 'boolean',
-        description: 'Dispose this language kernel and clear its state.',
+      timeoutMs: 600_000,
+      isConcurrencySafe: () => false,
+      async execute(args, exec) {
+        const language = args.language as Language
+        const owner = keyFor(exec.agent)
+        let agentKernels = kernels.get(owner)
+        if (!agentKernels) {
+          agentKernels = new Map()
+          kernels.set(owner, agentKernels)
+        }
+        if (args.reset) {
+          agentKernels.get(language)?.dispose()
+          agentKernels.delete(language)
+          return `${language} kernel reset.`
+        }
+        if (!args.code?.trim())
+          throw new Error('kernel requires non-empty code unless reset is true')
+        let kernel = agentKernels.get(language)
+        if (!kernel) {
+          let created: PersistentKernel
+          created = new PersistentKernel(
+            language,
+            ctx,
+            exec.agent?.session.header.cwd ?? process.cwd(),
+            () => {
+              if (agentKernels?.get(language) === created) agentKernels.delete(language)
+            },
+          )
+          kernel = created
+          agentKernels.set(language, kernel)
+        }
+        try {
+          const result = await kernel.evaluate(args.code, exec)
+          const text = [
+            result.output?.trim(),
+            result.value ? `=> ${result.value}` : '',
+            result.error ? `Error:\n${result.error}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+          const limit = config.maxOutputChars ?? 32_000
+          return text.length <= limit ? text : `${text.slice(0, limit)}\n[output truncated]`
+        } catch (error) {
+          kernel.dispose()
+          agentKernels.delete(language)
+          throw error
+        }
       },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    timeoutMs: 600_000,
-    isConcurrencySafe: () => false,
-    async execute(args, exec) {
-      const language = args.language as Language
-      const owner = keyFor(exec.agent)
-      let agentKernels = kernels.get(owner)
-      if (!agentKernels) {
-        agentKernels = new Map()
-        kernels.set(owner, agentKernels)
-      }
-      if (args.reset) {
-        agentKernels.get(language)?.dispose()
-        agentKernels.delete(language)
-        return `${language} kernel reset.`
-      }
-      if (!args.code?.trim()) throw new Error('kernel requires non-empty code unless reset is true')
-      let kernel = agentKernels.get(language)
-      if (!kernel) {
-        let created: PersistentKernel
-        created = new PersistentKernel(
-          language,
-          ctx,
-          exec.agent?.session.header.cwd ?? process.cwd(),
-          () => {
-            if (agentKernels?.get(language) === created) agentKernels.delete(language)
-          },
-        )
-        kernel = created
-        agentKernels.set(language, kernel)
-      }
-      try {
-        const result = await kernel.evaluate(args.code, exec)
-        const text = [
-          result.output?.trim(),
-          result.value ? `=> ${result.value}` : '',
-          result.error ? `Error:\n${result.error}` : '',
-        ].filter(Boolean).join('\n')
-        const limit = config.maxOutputChars ?? 32_000
-        return text.length <= limit ? text : `${text.slice(0, limit)}\n[output truncated]`
-      } catch (error) {
-        kernel.dispose()
-        agentKernels.delete(language)
-        throw error
-      }
-    },
-  }))
+    }),
+  )
 }

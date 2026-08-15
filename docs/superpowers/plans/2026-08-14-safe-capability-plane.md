@@ -26,11 +26,13 @@
 ### Task 1: Proposal service and approval gate
 
 **Files:**
+
 - Create: `packages/proposals/package.json`
 - Create: `packages/proposals/src/index.ts`
 - Create: `tests/proposals.test.mjs`
 
 **Interfaces:**
+
 - Produces `Context.proposals: ProposalRuntime`.
 - Produces `ProposalRuntime.create(agent, input): ProposalView`.
 - Produces `ProposalRuntime.list(agent)`, `show(agent, id)`, `discard(agent, id)`, and `apply(agent, id, exec)`.
@@ -58,11 +60,13 @@ export interface CreateProposalInput {
 ### Task 2: Lazy MCP catalog and activation lifecycle
 
 **Files:**
+
 - Create: `packages/mcp-control/package.json`
 - Create: `packages/mcp-control/src/index.ts`
 - Create: `tests/mcp-control.test.mjs`
 
 **Interfaces:**
+
 - Produces `Context.mcpControl: McpControlRuntime`.
 - Consumes `ctx.proposals`, `ctx.tools`, `ctx.commands`, and upstream `McpClient`.
 - Produces `configure(agent, { workspace, servers })`.
@@ -83,10 +87,12 @@ export interface CreateProposalInput {
 ### Task 3: Discovery becomes inert and session-scoped
 
 **Files:**
+
 - Modify: `packages/discovery/src/index.ts`
 - Modify: `tests/discovery.test.mjs`
 
 **Interfaces:**
+
 - Consumes `ctx.mcpControl.configure()`.
 - Stops mounting imported MCP servers directly.
 - Preserves skills, instructions, commands, hooks, and trust behavior.
@@ -101,11 +107,13 @@ export interface CreateProposalInput {
 ### Task 4: Pure semantic edit planner
 
 **Files:**
+
 - Create: `packages/refactor/package.json`
 - Create: `packages/refactor/src/workspace-edit.ts`
 - Create: `tests/refactor.test.mjs`
 
 **Interfaces:**
+
 - Produces `normalizeWorkspaceEdit(raw): NormalizedDocumentEdit[]`.
 - Produces `applyTextEdits(content, edits, encoding): string`.
 - Produces `validateEditPlan(files): void`.
@@ -120,6 +128,7 @@ export interface CreateProposalInput {
 ### Task 5: Refactor provider, proposal, and recovery journal
 
 **Files:**
+
 - Create: `packages/refactor/src/index.ts`
 - Create: `packages/refactor/src/lsp-client.ts`
 - Create: `packages/refactor/src/journal.ts`
@@ -128,6 +137,7 @@ export interface CreateProposalInput {
 - Extend: `tests/refactor.test.mjs`
 
 **Interfaces:**
+
 - Produces `Context.refactors: RefactorRuntime`.
 - Produces `registerServer(id, config): disposer`.
 - Registers `semantic_refactor` actions `prepare_rename`, `list_recovery`, and `prepare_recovery`.
@@ -147,6 +157,7 @@ export interface CreateProposalInput {
 ### Task 6: Distribution wiring, documentation, and verification
 
 **Files:**
+
 - Modify: `bundles/omd.cordis.yml`
 - Modify: `package.json`
 - Modify: `README.md`
@@ -154,6 +165,7 @@ export interface CreateProposalInput {
 - Modify: `src/index.ts` only if the release version is intentionally changed
 
 **Interfaces:**
+
 - Exports `oh-my-dsh/proposals`, `oh-my-dsh/mcp-control`, and `oh-my-dsh/refactor`.
 - Loads services before discovery and LSP auto-registration.
 

@@ -6,12 +6,7 @@
  * @module oh-my-dsh/discovery
  */
 
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-} from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
@@ -217,12 +212,14 @@ export function renderInstructions(
     '<system-reminder>',
     'The following compatible coding-agent instructions are active. More specific files appear later and take precedence. They remain lower authority than system, developer, and direct user instructions.',
     '',
-    ...selected.reverse().flatMap((source) => [
-      `Instructions from: ${displayPath(source.path, cwd, home)}`,
-      '',
-      source.body.replaceAll('</system-reminder>', '<\\/system-reminder>'),
-      '',
-    ]),
+    ...selected
+      .reverse()
+      .flatMap((source) => [
+        `Instructions from: ${displayPath(source.path, cwd, home)}`,
+        '',
+        source.body.replaceAll('</system-reminder>', '<\\/system-reminder>'),
+        '',
+      ]),
     '</system-reminder>',
   ].join('\n')
 }
@@ -236,15 +233,18 @@ function normalizeServer(value: unknown, configPath?: string): ForeignMcpServer 
   const strings = (input: unknown): Record<string, string> | undefined => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
     return Object.fromEntries(
-      Object.entries(input)
-        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      Object.entries(input).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
     )
   }
   return {
     configPath,
     command,
     url,
-    args: Array.isArray(raw.args) ? raw.args.filter((item): item is string => typeof item === 'string') : undefined,
+    args: Array.isArray(raw.args)
+      ? raw.args.filter((item): item is string => typeof item === 'string')
+      : undefined,
     env: strings(raw.env),
     headers: strings(raw.headers),
     cwd: typeof raw.cwd === 'string' ? raw.cwd : undefined,
@@ -351,7 +351,10 @@ function hasProjectMcpConfig(cwd: string): boolean {
   ].some((path) => existsSync(path))
 }
 
-export function discoverMcpServers(cwd: string, home = homedir()): Record<string, ForeignMcpServer> {
+export function discoverMcpServers(
+  cwd: string,
+  home = homedir(),
+): Record<string, ForeignMcpServer> {
   return { ...userMcpServers(home), ...projectMcpServers(cwd) }
 }
 
@@ -506,10 +509,9 @@ function userHookConfigPaths(home: string): {
   codex: string[]
 } {
   return {
-    claude: [
-      join(home, '.claude', 'settings.json'),
-      join(home, '.claude', 'hooks.json'),
-    ].filter(existsSync),
+    claude: [join(home, '.claude', 'settings.json'), join(home, '.claude', 'hooks.json')].filter(
+      existsSync,
+    ),
     codex: [join(home, '.codex', 'hooks.json')].filter(existsSync),
   }
 }
@@ -520,10 +522,9 @@ function projectHookConfigPaths(cwd: string): {
 } {
   const root = gitRoot(cwd)
   return {
-    claude: [
-      join(root, '.claude', 'settings.json'),
-      join(root, '.claude', 'hooks.json'),
-    ].filter(existsSync),
+    claude: [join(root, '.claude', 'settings.json'), join(root, '.claude', 'hooks.json')].filter(
+      existsSync,
+    ),
     codex: [join(root, '.codex', 'hooks.json')].filter(existsSync),
   }
 }
@@ -568,22 +569,24 @@ function registerCommands(
         input: { hint: 'arguments' },
         handler: ({ agent, rawInput }) => {
           const args = rawInput.trim()
-          const prompt = command.body
-            .replaceAll('$ARGUMENTS', args)
-            .replaceAll('{{args}}', args)
-          agent.followup(createUserMessage({
-            content: [{
-              type: 'text',
-              text: [
-                '<imported-command>',
-                `Source: ${displayPath(command.path, workspace, home)}`,
-                '',
-                prompt,
-                '</imported-command>',
-              ].join('\n'),
-            }],
-            source: { kind: 'plugin', plugin: name, form: 'instructions' },
-          }))
+          const prompt = command.body.replaceAll('$ARGUMENTS', args).replaceAll('{{args}}', args)
+          agent.followup(
+            createUserMessage({
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    '<imported-command>',
+                    `Source: ${displayPath(command.path, workspace, home)}`,
+                    '',
+                    prompt,
+                    '</imported-command>',
+                  ].join('\n'),
+                },
+              ],
+              source: { kind: 'plugin', plugin: name, form: 'instructions' },
+            }),
+          )
           return { kind: 'success', text: `Started /${command.name}.` }
         },
       })
@@ -598,10 +601,7 @@ interface AgentRegistryApi {
   resume(options: ResumeAgentOptions): Promise<AgentHandle>
 }
 
-function withSetup<T extends { setup?: AgentSetup }>(
-  options: T,
-  configure: AgentSetup,
-): T {
+function withSetup<T extends { setup?: AgentSetup }>(options: T, configure: AgentSetup): T {
   const existing = options.setup
   return {
     ...options,
@@ -615,9 +615,8 @@ function withSetup<T extends { setup?: AgentSetup }>(
 
 function installAgentSetup(ctx: Context, configure: AgentSetup): void {
   const traced = ctx.agents as AgentRegistryApi
-  const service = (
-    (traced as unknown as Record<PropertyKey, unknown>)[symbols.original] ?? traced
-  ) as AgentRegistryApi
+  const service = ((traced as unknown as Record<PropertyKey, unknown>)[symbols.original] ??
+    traced) as AgentRegistryApi
   const originalCreate = service.create
   const originalResume = service.resume
   const create = function (
@@ -634,10 +633,13 @@ function installAgentSetup(ctx: Context, configure: AgentSetup): void {
   }
   service.create = create
   service.resume = resume
-  ctx.effect(() => () => {
-    if (service.create === create) service.create = originalCreate
-    if (service.resume === resume) service.resume = originalResume
-  }, 'omd-discovery.agent-setup')
+  ctx.effect(
+    () => () => {
+      if (service.create === create) service.create = originalCreate
+      if (service.resume === resume) service.resume = originalResume
+    },
+    'omd-discovery.agent-setup',
+  )
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -667,18 +669,25 @@ export function apply(ctx: Context, config: Config): void {
     if (config.instructions !== false) {
       const alreadyLoaded = agent.session.events.some(
         (event) =>
-          event.type === 'user/message'
-          && event.data.source.kind === 'plugin'
-          && event.data.source.plugin === name,
+          event.type === 'user/message' &&
+          event.data.source.kind === 'plugin' &&
+          event.data.source.plugin === name,
       )
       if (!alreadyLoaded) {
         const sources = discoverInstructions(workspace, home)
-        const text = renderInstructions(sources, workspace, config.maxInstructionBytes ?? 65_536, home)
+        const text = renderInstructions(
+          sources,
+          workspace,
+          config.maxInstructionBytes ?? 65_536,
+          home,
+        )
         if (text) {
-          agent.inject(createUserMessage({
-            content: [{ type: 'text', text }],
-            source: { kind: 'plugin', plugin: name, form: 'instructions' },
-          }))
+          agent.inject(
+            createUserMessage({
+              content: [{ type: 'text', text }],
+              source: { kind: 'plugin', plugin: name, form: 'instructions' },
+            }),
+          )
         }
       }
     }
@@ -695,14 +704,14 @@ export function apply(ctx: Context, config: Config): void {
     if (!trusted) {
       const projectHooks = projectHookConfigPaths(workspace)
       const hasExecutableConfig =
-        (config.mcp !== false && hasProjectMcpConfig(workspace))
-        || (config.hooks !== false && projectHooks.claude.length + projectHooks.codex.length > 0)
-        || (
-          config.skills !== false
-          && projectSkillDirectories(workspace).some((directory) => existsSync(directory))
-        )
+        (config.mcp !== false && hasProjectMcpConfig(workspace)) ||
+        (config.hooks !== false && projectHooks.claude.length + projectHooks.codex.length > 0) ||
+        (config.skills !== false &&
+          projectSkillDirectories(workspace).some((directory) => existsSync(directory)))
       if (hasExecutableConfig) {
-        console.warn(`oh-my-dsh: skipped imported project integrations in untrusted workspace ${gitRoot(workspace)}; run "omd trust add ${JSON.stringify(gitRoot(workspace))}" to enable them.`)
+        console.warn(
+          `oh-my-dsh: skipped imported project integrations in untrusted workspace ${gitRoot(workspace)}; run "omd trust add ${JSON.stringify(gitRoot(workspace))}" to enable them.`,
+        )
       }
       configured.add(agent)
       return
@@ -710,12 +719,14 @@ export function apply(ctx: Context, config: Config): void {
 
     const fibers: PromiseLike<unknown>[] = []
     if (config.skills !== false) {
-      fibers.push(agentCtx.plugin(SkillFilesystem, {
-        providerName: 'omd-discovered-project',
-        includeDefaultRoots: false,
-        customSkillDirs: projectSkillDirectories(workspace),
-        watch: true,
-      }))
+      fibers.push(
+        agentCtx.plugin(SkillFilesystem, {
+          providerName: 'omd-discovered-project',
+          includeDefaultRoots: false,
+          customSkillDirs: projectSkillDirectories(workspace),
+          watch: true,
+        }),
+      )
     }
     if (config.hooks !== false) {
       fibers.push(...mountHooks(agentCtx, projectHookConfigPaths(workspace)))

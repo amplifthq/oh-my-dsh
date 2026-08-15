@@ -4,7 +4,12 @@
   "description": "Workspace @file mentions expanded into hash-anchored context for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["dsh-plugin", "deepseek-harness", "mentions", "at-file"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "mentions",
+    "at-file"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

@@ -176,8 +176,9 @@ function redactUrl(value: string): string {
 function argumentPreview(args: string[]): string[] {
   let redactNext: 'value' | 'environment' | undefined
   const sensitiveName = (value: string) =>
-    /(?:^|[_-])(?:api[_-]?key|token|secret|password|passwd|credential|authorization|cookie)(?:$|[_-])/i
-      .test(value)
+    /(?:^|[_-])(?:api[_-]?key|token|secret|password|passwd|credential|authorization|cookie)(?:$|[_-])/i.test(
+      value,
+    )
   const redactEnvironment = (value: string) => {
     const assignment = value.match(/^([A-Za-z_][A-Za-z0-9_]*)=.+$/)
     return assignment ? `${assignment[1]}=[redacted]` : '[redacted]'
@@ -211,14 +212,24 @@ function argumentPreview(args: string[]): string[] {
     if (/^(?:authorization|proxy-authorization|cookie|set-cookie)\s*:/i.test(argument)) {
       return '[redacted]'
     }
-    if (/^--?[^=]*(?:token|secret|password|passwd|api[-_]?key|authorization|credential|cookie|header)[^=]*$/i.test(argument)) {
+    if (
+      /^--?[^=]*(?:token|secret|password|passwd|api[-_]?key|authorization|credential|cookie|header)[^=]*$/i.test(
+        argument,
+      )
+    ) {
       redactNext = 'value'
       return argument
     }
-    const assignment = argument.match(/^((?:--?)[^=]*(?:token|secret|password|passwd|api[-_]?key|authorization|credential|cookie|header)[^=]*=).+$/i)
+    const assignment = argument.match(
+      /^((?:--?)[^=]*(?:token|secret|password|passwd|api[-_]?key|authorization|credential|cookie|header)[^=]*=).+$/i,
+    )
     if (assignment) return `${assignment[1]}[redacted]`
     if (/^bearer\s+/i.test(argument)) return '[redacted]'
-    if (/["'](?:api[_-]?key|token|secret|password|credential|authorization|cookie)["']\s*[:=]/i.test(argument)) {
+    if (
+      /["'](?:api[_-]?key|token|secret|password|credential|authorization|cookie)["']\s*[:=]/i.test(
+        argument,
+      )
+    ) {
       return '[redacted]'
     }
     if (/^https?:\/\//i.test(argument)) return redactUrl(argument)
@@ -258,7 +269,10 @@ export function validCachedTools(
 }
 
 function tokens(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
 }
 
 function scoreEntry(entry: McpServerView, query: string): number {
@@ -281,7 +295,9 @@ export function searchCatalog<T extends McpServerView>(entries: T[], query: stri
   return entries
     .map((entry) => ({ entry, score: scoreEntry(entry, query) }))
     .filter(({ score }) => score > 0)
-    .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name))
+    .sort(
+      (left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name),
+    )
     .map(({ entry }) => entry)
 }
 
@@ -295,11 +311,13 @@ export function readMcpCache(path: string): McpMetadataCache {
       const entry = value as { fingerprint?: unknown; tools?: unknown }
       if (typeof entry.fingerprint !== 'string' || !Array.isArray(entry.tools)) continue
       const tools = entry.tools
-        .filter((tool): tool is { name: string; description: string } =>
-          Boolean(tool)
-          && typeof tool === 'object'
-          && typeof (tool as { name?: unknown }).name === 'string'
-          && typeof (tool as { description?: unknown }).description === 'string')
+        .filter(
+          (tool): tool is { name: string; description: string } =>
+            Boolean(tool) &&
+            typeof tool === 'object' &&
+            typeof (tool as { name?: unknown }).name === 'string' &&
+            typeof (tool as { description?: unknown }).description === 'string',
+        )
         .map((tool) => ({ name: tool.name, description: tool.description }))
       output[name] = { fingerprint: entry.fingerprint, tools }
     }
@@ -381,11 +399,7 @@ export class McpCatalogStore {
     for (const [name, value] of active) {
       const previous = existing?.definitions.get(name)
       const next = nextDefinitions.get(name)
-      if (
-        !previous
-        || !next
-        || fingerprintServer(previous) !== fingerprintServer(next)
-      ) {
+      if (!previous || !next || fingerprintServer(previous) !== fingerprintServer(next)) {
         active.delete(name)
         removed.push({ name, ...value })
       }
@@ -407,7 +421,7 @@ export class McpCatalogStore {
         const fingerprint = fingerprintServer(definition)
         return {
           ...view,
-          status: active ? 'active' as const : 'inactive' as const,
+          status: active ? ('active' as const) : ('inactive' as const),
           cachedTools: active?.tools ?? validCachedTools(this.cache[definition.name], fingerprint),
         }
       })
@@ -423,12 +437,7 @@ export class McpCatalogStore {
     return this.states.get(owner)?.active.get(name)
   }
 
-  activate(
-    owner: object,
-    name: string,
-    fiber: McpFiberHandle,
-    tools: CachedMcpTool[],
-  ): void {
+  activate(owner: object, name: string, fiber: McpFiberHandle, tools: CachedMcpTool[]): void {
     const state = this.requireState(owner)
     if (!state.definitions.has(name)) throw new Error(`unknown MCP server "${name}"`)
     if (state.active.has(name)) throw new Error(`MCP server "${name}" is already active`)
@@ -717,113 +726,124 @@ export class McpControlRuntime extends Service {
         return {
           kind: 'success',
           text: entries.length
-            ? entries.map((entry) =>
-              `${entry.name} [${entry.status}] ${entry.source} ${entry.transport} ${entry.endpoint}`).join('\n')
+            ? entries
+                .map(
+                  (entry) =>
+                    `${entry.name} [${entry.status}] ${entry.source} ${entry.transport} ${entry.endpoint}`,
+                )
+                .join('\n')
             : 'No matching MCP servers.',
         }
       },
     })
 
-    ctx.tools.register(defineTool({
-      name: 'mcp_control',
-      description: 'List or search inert MCP servers, or prepare an approval-gated activation/deactivation proposal.',
-      parameters: {
-        action: {
-          type: 'string',
-          required: true,
-          enum: ['list', 'search', 'prepare_activate', 'prepare_deactivate'],
-          description: 'Catalog or proposal operation.',
+    ctx.tools.register(
+      defineTool({
+        name: 'mcp_control',
+        description:
+          'List or search inert MCP servers, or prepare an approval-gated activation/deactivation proposal.',
+        parameters: {
+          action: {
+            type: 'string',
+            required: true,
+            enum: ['list', 'search', 'prepare_activate', 'prepare_deactivate'],
+            description: 'Catalog or proposal operation.',
+          },
+          query: {
+            type: 'string',
+            description: 'Search text for server names and cached tool metadata.',
+          },
+          server_name: {
+            type: 'string',
+            description: 'Catalog server name for activation or deactivation.',
+          },
         },
-        query: {
-          type: 'string',
-          description: 'Search text for server names and cached tool metadata.',
+        output: {
+          schema: { type: 'string' },
+          render: (_args, value) => [{ type: 'text', text: value }],
         },
-        server_name: {
-          type: 'string',
-          description: 'Catalog server name for activation or deactivation.',
-        },
-      },
-      output: {
-        schema: { type: 'string' },
-        render: (_args, value) => [{ type: 'text', text: value }],
-      },
-      execute: async (args, exec) => {
-        const agent = requireAgent(exec)
-        if (args.action === 'list') {
-          return JSON.stringify({ servers: this.list(agent) }, null, 2)
-        }
-        if (args.action === 'search') {
-          if (!args.query?.trim()) throw new Error('search requires query')
-          return JSON.stringify({ servers: searchCatalog(this.list(agent), args.query) }, null, 2)
-        }
-        if (!args.server_name) throw new Error(`${args.action} requires server_name`)
-        const view = this.list(agent).find((entry) => entry.name === args.server_name)
-        if (!view) throw new Error(`unknown MCP server "${args.server_name}"`)
-        if (args.action === 'prepare_activate') {
-          if (view.status === 'active') throw new Error(`MCP server "${view.name}" is already active`)
-          const approvedDefinition = this.store.definition(agent, view.name)
-          if (!approvedDefinition) throw new Error(`unknown MCP server "${view.name}"`)
-          const approvedFingerprint = fingerprintServer(approvedDefinition)
-          const proposal = ctx.proposals.create(agent, {
-            kind: 'mcp-activate',
-            title: `Activate MCP server ${view.name}`,
-            summary: `Start one ${view.transport} MCP server for this agent session and expose its discovered tools.`,
-            effects: [{
-              type: 'mcp-server-activation',
-              target: view.name,
-              summary: `Start ${view.endpoint}; expose tools only to session ${String(agent.id)}.`,
-              details: jsonSafe(view),
-            }],
-            signal: this.lifecycle.signal,
-            commit: async (commitExec) => {
-              const activationSignal = AbortSignal.any([
-                commitExec.signal,
-                this.lifecycle.signal,
-              ])
-              const loaded = await this.controller.activate(
-                agent,
-                String(agent.id),
-                view.name,
-                approvedFingerprint,
-                activationSignal,
-              )
-              try {
-                const cacheEntry = this.store.cacheEntry(view.name)
-                if (cacheEntry) {
-                  await updateMcpCache(this.cachePath, { [view.name]: cacheEntry })
+        execute: async (args, exec) => {
+          const agent = requireAgent(exec)
+          if (args.action === 'list') {
+            return JSON.stringify({ servers: this.list(agent) }, null, 2)
+          }
+          if (args.action === 'search') {
+            if (!args.query?.trim()) throw new Error('search requires query')
+            return JSON.stringify({ servers: searchCatalog(this.list(agent), args.query) }, null, 2)
+          }
+          if (!args.server_name) throw new Error(`${args.action} requires server_name`)
+          const view = this.list(agent).find((entry) => entry.name === args.server_name)
+          if (!view) throw new Error(`unknown MCP server "${args.server_name}"`)
+          if (args.action === 'prepare_activate') {
+            if (view.status === 'active')
+              throw new Error(`MCP server "${view.name}" is already active`)
+            const approvedDefinition = this.store.definition(agent, view.name)
+            if (!approvedDefinition) throw new Error(`unknown MCP server "${view.name}"`)
+            const approvedFingerprint = fingerprintServer(approvedDefinition)
+            const proposal = ctx.proposals.create(agent, {
+              kind: 'mcp-activate',
+              title: `Activate MCP server ${view.name}`,
+              summary: `Start one ${view.transport} MCP server for this agent session and expose its discovered tools.`,
+              effects: [
+                {
+                  type: 'mcp-server-activation',
+                  target: view.name,
+                  summary: `Start ${view.endpoint}; expose tools only to session ${String(agent.id)}.`,
+                  details: jsonSafe(view),
+                },
+              ],
+              signal: this.lifecycle.signal,
+              commit: async (commitExec) => {
+                const activationSignal = AbortSignal.any([commitExec.signal, this.lifecycle.signal])
+                const loaded = await this.controller.activate(
+                  agent,
+                  String(agent.id),
+                  view.name,
+                  approvedFingerprint,
+                  activationSignal,
+                )
+                try {
+                  const cacheEntry = this.store.cacheEntry(view.name)
+                  if (cacheEntry) {
+                    await updateMcpCache(this.cachePath, { [view.name]: cacheEntry })
+                  }
+                } catch (error) {
+                  this.ctx.logger.warn(
+                    `oh-my-dsh: could not update MCP metadata cache: ${String(error)}`,
+                  )
                 }
-              } catch (error) {
-                this.ctx.logger.warn(`oh-my-dsh: could not update MCP metadata cache: ${String(error)}`)
-              }
-              return {
-                summary: `Activated MCP server ${view.name} with ${loaded.tools.length} tool(s).`,
-                details: jsonSafe({ server: view.name, tools: loaded.tools }),
-              }
-            },
+                return {
+                  summary: `Activated MCP server ${view.name} with ${loaded.tools.length} tool(s).`,
+                  details: jsonSafe({ server: view.name, tools: loaded.tools }),
+                }
+              },
+            })
+            return JSON.stringify({ proposal }, null, 2)
+          }
+          if (view.status !== 'active') throw new Error(`MCP server "${view.name}" is not active`)
+          const proposal = ctx.proposals.create(agent, {
+            kind: 'mcp-deactivate',
+            title: `Deactivate MCP server ${view.name}`,
+            summary: 'Disconnect the server and remove its tools from this agent session.',
+            effects: [
+              {
+                type: 'mcp-server-deactivation',
+                target: view.name,
+                summary: `Disconnect ${view.endpoint} and unregister its tools.`,
+                details: jsonSafe(view),
+              },
+            ],
+            signal: this.lifecycle.signal,
+            commit: async () => ({
+              summary: (await this.controller.deactivate(agent, view.name))
+                ? `Deactivated MCP server ${view.name}.`
+                : `MCP server ${view.name} was already inactive.`,
+            }),
           })
           return JSON.stringify({ proposal }, null, 2)
-        }
-        if (view.status !== 'active') throw new Error(`MCP server "${view.name}" is not active`)
-        const proposal = ctx.proposals.create(agent, {
-          kind: 'mcp-deactivate',
-          title: `Deactivate MCP server ${view.name}`,
-          summary: 'Disconnect the server and remove its tools from this agent session.',
-          effects: [{
-            type: 'mcp-server-deactivation',
-            target: view.name,
-            summary: `Disconnect ${view.endpoint} and unregister its tools.`,
-            details: jsonSafe(view),
-          }],
-          signal: this.lifecycle.signal,
-          commit: async () => ({
-            summary: await this.controller.deactivate(agent, view.name)
-              ? `Deactivated MCP server ${view.name}.`
-              : `MCP server ${view.name} was already inactive.`,
-          }),
-        })
-        return JSON.stringify({ proposal }, null, 2)
-      },
-    }))
+        },
+      }),
+    )
   }
 
   configure(agent: Agent, definitions: McpServerDefinition[]): Promise<void> {
@@ -853,12 +873,14 @@ export class McpControlRuntime extends Service {
     const prefix = `mcp__${namespace}__`
     return settleLoadedMcpFiber(
       fiber,
-      () => agent.ctx.tools.schemas(agent)
-        .filter((schema) => schema.name.startsWith(prefix))
-        .map((schema) => ({
-          name: schema.name.slice(prefix.length),
-          description: schema.description,
-        })),
+      () =>
+        agent.ctx.tools
+          .schemas(agent)
+          .filter((schema) => schema.name.startsWith(prefix))
+          .map((schema) => ({
+            name: schema.name.slice(prefix.length),
+            description: schema.description,
+          })),
       signal,
     )
   }

@@ -54,7 +54,7 @@ export interface OneShotDiagnosticsResult {
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : undefined
 }
 
@@ -91,7 +91,9 @@ function positionEncoding(initializeResult: unknown): PositionEncoding {
   const encoding = capabilities?.positionEncoding
   if (encoding === undefined) return 'utf-16'
   if (encoding === 'utf-8' || encoding === 'utf-16' || encoding === 'utf-32') return encoding
-  throw new Error(`language server selected unsupported position encoding ${JSON.stringify(encoding)}`)
+  throw new Error(
+    `language server selected unsupported position encoding ${JSON.stringify(encoding)}`,
+  )
 }
 
 export async function answerLspServerRequest(
@@ -100,7 +102,9 @@ export async function answerLspServerRequest(
   context: LspServerRequestContext,
 ): Promise<unknown> {
   if (method === 'workspace/applyEdit') {
-    throw new Error('server-driven workspace edits are disabled; only returned proposal edits are accepted')
+    throw new Error(
+      'server-driven workspace edits are disabled; only returned proposal edits are accepted',
+    )
   }
   if (method === 'workspace/configuration') {
     const items = object(params)?.items
@@ -111,9 +115,9 @@ export async function answerLspServerRequest(
     return structuredClone(context.workspaceFolders)
   }
   if (
-    method === 'client/registerCapability'
-    || method === 'client/unregisterCapability'
-    || method === 'window/workDoneProgress/create'
+    method === 'client/registerCapability' ||
+    method === 'client/unregisterCapability' ||
+    method === 'window/workDoneProgress/create'
   ) {
     return null
   }
@@ -124,11 +128,14 @@ export async function executeOneShotRename(
   connection: JsonRpcConnection,
   request: OneShotRenameRequest,
 ): Promise<OneShotRenameResult> {
-  const documents: LspDocumentSnapshot[] = [{
-    documentUri: request.documentUri,
-    languageId: request.languageId,
-    content: request.content,
-  }, ...(request.additionalDocuments ?? [])]
+  const documents: LspDocumentSnapshot[] = [
+    {
+      documentUri: request.documentUri,
+      languageId: request.languageId,
+      content: request.content,
+    },
+    ...(request.additionalDocuments ?? []),
+  ]
   const documentUris = new Set(documents.map((document) => document.documentUri))
   if (documentUris.size !== documents.length) {
     throw new Error('rename document snapshots must have unique URIs')
@@ -239,9 +246,11 @@ export async function executeOneShotDiagnostics(
       },
     })
     opened = true
-    const report = object(await connection.request('textDocument/diagnostic', {
-      textDocument: { uri: request.documentUri },
-    }))
+    const report = object(
+      await connection.request('textDocument/diagnostic', {
+        textDocument: { uri: request.documentUri },
+      }),
+    )
     return {
       supported: true,
       items: Array.isArray(report?.items) ? report.items : [],
