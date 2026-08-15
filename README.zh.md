@@ -208,6 +208,8 @@ Bundle 位于 [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml)，独立插件�
 
 ## 开发
 
+贡献流程和分支规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ```sh
 git clone https://github.com/amplifthq/oh-my-dsh.git
 cd oh-my-dsh

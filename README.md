@@ -208,6 +208,8 @@ The bundle lives in [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml); individu
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for pull-request and branch rules.
+
 ```sh
 git clone https://github.com/amplifthq/oh-my-dsh.git
 cd oh-my-dsh

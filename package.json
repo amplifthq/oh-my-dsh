@@ -50,6 +50,7 @@
       "patch": "./bundles/omd.cordis.yml"
     }
   },
+  "packageManager": "pnpm@10.30.3",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "npm run build && node --test tests/*.test.mjs",

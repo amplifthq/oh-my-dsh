@@ -1,5 +1,8 @@
 node_modules/
 dist/
 .omd/
+.env
+.env.*
+!.env.example
 *.log
 .DS_Store

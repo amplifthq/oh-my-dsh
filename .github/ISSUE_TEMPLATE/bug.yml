@@ -1,0 +1,48 @@
+name: Bug
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Search existing issues first. For security problems, use a [private advisory](https://github.com/amplifthq/oh-my-dsh/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: oh-my-dsh version
+      placeholder: 0.1.3
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: v24.18.0
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: `omd doctor` output
+      render: text
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true

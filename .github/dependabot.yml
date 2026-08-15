@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      deepseek-dsh:
+        patterns:
+          - '@deepseek-ai/dsh*'
+      language-servers:
+        patterns:
+          - pyright
+          - typescript-language-server
+          - vscode-langservers-extracted
+          - yaml-language-server
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
