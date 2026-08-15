@@ -131,7 +131,6 @@ export class DapSession {
         this.pending.delete(seq)
         reject(new DapSessionError(`DAP ${command} timed out after ${timeoutMs ?? this.options.requestTimeoutMs}ms`))
       }, timeoutMs ?? this.options.requestTimeoutMs)
-      timeout.unref?.()
       this.pending.set(seq, {
         command,
         resolve: (value) => {
