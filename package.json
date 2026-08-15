@@ -53,7 +53,7 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "npm run build && node --test tests/*.test.mjs",
+    "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "prepack": "npm run build"
   },
