@@ -1,12 +1,43 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import {
+  createWriteStream,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { zstdDecompressSync } from 'node:zlib'
+import { pipeline } from 'node:stream/promises'
+import { detectDistributionMode, formatDistributionIdentity } from './distribution-identity.js'
+import { verifyFileManifest } from './distribution-files.js'
+import {
+  findArtifactForPlatform,
+  normalizePlatform,
+  parseReleaseManifest,
+} from './distribution-manifest.js'
+import {
+  acquireInstallLock,
+  beginInstallTransaction,
+  commitInstallTransaction,
+  readInstallState,
+  reconcileTransactions,
+  rollbackToPreviousVersion,
+} from './distribution-state.js'
 import { profilePackageSpec } from './package-spec.js'
 
 const require = createRequire(import.meta.url)
@@ -14,6 +45,13 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
 const dshHome = resolve(process.env.DSH_HOME || join(homedir(), '.dsh'))
 const omdConfigPath = join(dshHome, 'omd.json')
+const RELEASE_MANIFEST_URL =
+  process.env.OMD_MANIFEST_URL ||
+  'https://github.com/amplifthq/oh-my-dsh/releases/latest/download/release-manifest.json'
+
+function distributionContext() {
+  return detectDistributionMode(packageRoot)
+}
 const presetCatalog = {
   memory: 'Local persistent knowledge graph via MCP Reference Memory',
   context7: 'Current library documentation through Context7 MCP',
@@ -60,6 +98,48 @@ function packageSpec() {
   })
 }
 
+function resolveInstallRoot(mode) {
+  if (process.env.OMD_INSTALL_ROOT) return resolve(process.env.OMD_INSTALL_ROOT)
+  if (mode.mode !== 'portable' || !mode.distributionRoot) return null
+  const parent = dirname(mode.distributionRoot)
+  if (basename(parent) === 'versions') return dirname(parent)
+  return null
+}
+
+function portableNodeModulesTarget(mode) {
+  const installRoot = resolveInstallRoot(mode)
+  if (installRoot) return resolve(installRoot, 'current', 'app', 'node_modules')
+  return resolve(mode.distributionRoot, 'app', 'node_modules')
+}
+
+function writeCordisPatch(directory) {
+  const patchPath = join(directory, 'cordis.patch.yml')
+  if (!existsSync(patchPath)) {
+    writeFileSync(
+      patchPath,
+      [
+        '# Your local overrides for the oh-my-dsh profile.',
+        '# This file is preserved across `omd setup` upgrades.',
+        '[]',
+        '',
+      ].join('\n'),
+    )
+  }
+}
+
+function linkPortableNodeModules(directory, target) {
+  const nodeModulesPath = join(directory, 'node_modules')
+  if (existsSync(nodeModulesPath)) {
+    const info = lstatSync(nodeModulesPath)
+    if (info.isSymbolicLink()) {
+      rmSync(nodeModulesPath)
+    } else {
+      rmSync(nodeModulesPath, { recursive: true, force: true })
+    }
+  }
+  symlinkSync(target, nodeModulesPath)
+}
+
 function writeProfile(name, bundles) {
   const directory = join(dshHome, 'profiles', name)
   mkdirSync(directory, { recursive: true })
@@ -99,18 +179,7 @@ function writeProfile(name, bundles) {
   }
   writeFileSync(packagePath, `${JSON.stringify(next, null, 2)}\n`)
 
-  const patchPath = join(directory, 'cordis.patch.yml')
-  if (!existsSync(patchPath)) {
-    writeFileSync(
-      patchPath,
-      [
-        '# Your local overrides for the oh-my-dsh profile.',
-        '# This file is preserved across `omd setup` upgrades.',
-        '[]',
-        '',
-      ].join('\n'),
-    )
-  }
+  writeCordisPatch(directory)
 
   console.log(`omd: installing profile ${name}...`)
   const status = run(
@@ -119,6 +188,55 @@ function writeProfile(name, bundles) {
     { cwd: directory },
   )
   if (status !== 0) fail(`profile ${name} dependency installation failed`, status)
+}
+
+function writeProfilePortable(name, bundles, mode) {
+  const directory = join(dshHome, 'profiles', name)
+  mkdirSync(directory, { recursive: true })
+
+  const packagePath = join(directory, 'package.json')
+  let current = {}
+  if (existsSync(packagePath)) {
+    try {
+      current = JSON.parse(readFileSync(packagePath, 'utf8'))
+    } catch (error) {
+      fail(`cannot parse ${packagePath}: ${error.message}`)
+    }
+  }
+
+  const omdVersion = mode.distributionInfo.omdVersion
+  const next = {
+    ...current,
+    name: `dsh-profile-${name}`,
+    private: true,
+    type: 'module',
+    dependencies: {
+      ...(current.dependencies || {}),
+      'oh-my-dsh': omdVersion,
+      ...Object.fromEntries(
+        profilePluginDependencies.map((dependency) => [
+          dependency,
+          manifest.dependencies[dependency],
+        ]),
+      ),
+    },
+    dsh: {
+      ...(current.dsh || {}),
+      profile: {
+        ...(current.dsh?.profile || {}),
+        bundles,
+      },
+    },
+  }
+  writeFileSync(packagePath, `${JSON.stringify(next, null, 2)}\n`)
+  writeCordisPatch(directory)
+
+  const target = portableNodeModulesTarget(mode)
+  if (!existsSync(target)) {
+    fail(`portable dependency closure is missing: ${target}`)
+  }
+  linkPortableNodeModules(directory, target)
+  console.log(`omd: linked profile ${name} to portable dependency closure`)
 }
 
 function ensureBuilt() {
@@ -132,6 +250,14 @@ function ensureBuilt() {
 }
 
 function setup() {
+  const mode = distributionContext()
+  if (mode.mode === 'portable') {
+    for (const [name, bundles] of Object.entries(profiles)) {
+      writeProfilePortable(name, bundles, mode)
+    }
+    console.log(`omd: profiles linked under ${join(dshHome, 'profiles')}`)
+    return
+  }
   ensureBuilt()
   for (const [name, bundles] of Object.entries(profiles)) writeProfile(name, bundles)
   console.log(`omd: profiles installed under ${join(dshHome, 'profiles')}`)
@@ -221,8 +347,14 @@ function doctorListeners() {
   }
 }
 
-function doctor() {
-  console.log(`oh-my-dsh ${manifest.version}`)
+async function doctor(args = []) {
+  const mode = distributionContext()
+  if (mode.mode === 'portable' && mode.distributionInfo) {
+    console.log(formatDistributionIdentity(mode.distributionInfo))
+  } else {
+    console.log(`oh-my-dsh ${manifest.version}`)
+  }
+  console.log(`mode: ${mode.mode}`)
   console.log(`Node: ${process.version}`)
   console.log(`DSH_HOME: ${dshHome}`)
   for (const name of Object.keys(profiles)) {
@@ -235,6 +367,205 @@ function doctor() {
   }
   doctorWebFetch()
   doctorListeners()
+
+  if (args.includes('--verify')) {
+    if (mode.mode !== 'portable' || !mode.distributionRoot) {
+      console.log('file manifest: skipped (portable distribution only)')
+      return
+    }
+    const manifestPath = join(mode.distributionRoot, 'distribution-files.json')
+    if (!existsSync(manifestPath)) {
+      console.log('file manifest: missing distribution-files.json')
+      return
+    }
+    let fileManifest
+    try {
+      fileManifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    } catch (error) {
+      console.log(`file manifest: cannot parse distribution-files.json (${error.message})`)
+      return
+    }
+    const result = await verifyFileManifest(mode.distributionRoot, fileManifest)
+    if (result.ok) {
+      console.log('file manifest: ok')
+      return
+    }
+    console.log('file manifest: FAILED')
+    if (result.missing.length) console.log(`  missing: ${result.missing.join(', ')}`)
+    if (result.mismatches.length) console.log(`  mismatches: ${result.mismatches.join(', ')}`)
+    if (result.extra.length) console.log(`  extra: ${result.extra.join(', ')}`)
+  }
+}
+
+function rollback() {
+  const mode = distributionContext()
+  if (mode.mode !== 'portable') {
+    console.log('omd: rollback in npm/source mode is managed through npm.')
+    console.log('  npm install -g oh-my-dsh@<version>')
+    return
+  }
+  const installRoot = resolveInstallRoot(mode)
+  if (!installRoot) fail('cannot determine portable install root (set OMD_INSTALL_ROOT)')
+
+  reconcileTransactions(installRoot)
+  const lock = acquireInstallLock(installRoot)
+  try {
+    const result = rollbackToPreviousVersion(installRoot)
+    console.log(`omd: rolled back from ${result.from} to ${result.to}`)
+    console.log('omd: run `omd rollback` again to reverse this rollback when needed.')
+  } finally {
+    lock.release()
+  }
+}
+
+function sha256File(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex')
+}
+
+async function fetchReleaseManifest() {
+  if (process.env.OMD_RELEASE_MANIFEST_PATH) {
+    return parseReleaseManifest(
+      readFileSync(resolve(process.env.OMD_RELEASE_MANIFEST_PATH), 'utf8'),
+    )
+  }
+  const response = await fetch(RELEASE_MANIFEST_URL)
+  if (!response.ok) {
+    fail(`failed to fetch release manifest (${response.status} ${response.statusText})`)
+  }
+  return parseReleaseManifest(await response.text())
+}
+
+async function downloadToFile(url, destination) {
+  const response = await fetch(url)
+  if (!response.ok) {
+    fail(`failed to download artifact (${response.status} ${response.statusText})`)
+  }
+  if (!response.body) fail('download response has no body')
+  mkdirSync(dirname(destination), { recursive: true })
+  await pipeline(response.body, createWriteStream(destination))
+}
+
+function validateArchiveEntries(entries) {
+  for (const entry of entries) {
+    if (!entry || entry === './') continue
+    if (entry.startsWith('/') || entry.startsWith('../') || entry.includes('/../')) {
+      fail(`unsafe archive entry: ${entry}`)
+    }
+  }
+}
+
+function listTarEntries(archivePath) {
+  const result = spawnSync('tar', ['-tzf', archivePath], { encoding: 'utf8' })
+  if (result.status !== 0) {
+    fail(`cannot inspect archive: ${result.stderr || result.stdout}`)
+  }
+  return result.stdout.split('\n').filter(Boolean)
+}
+
+function extractTarArchive(archivePath, destination) {
+  validateArchiveEntries(listTarEntries(archivePath))
+  mkdirSync(destination, { recursive: true })
+  const result = spawnSync('tar', ['-xzf', archivePath, '-C', destination], { encoding: 'utf8' })
+  if (result.status !== 0) {
+    fail(`archive extraction failed: ${result.stderr || result.stdout}`)
+  }
+}
+
+function findExtractedVersionDir(stagingDir) {
+  if (existsSync(join(stagingDir, 'distribution.json'))) return stagingDir
+  const entries = readdirSync(stagingDir).filter((entry) => !entry.startsWith('.'))
+  if (entries.length === 1) {
+    const candidate = join(stagingDir, entries[0])
+    if (existsSync(join(candidate, 'distribution.json'))) return candidate
+  }
+  fail('cannot locate extracted portable version directory')
+}
+
+function runPortableHealthCheck(versionDir) {
+  const nodeBin = join(versionDir, 'runtime', 'bin', 'node')
+  const omdBin = join(versionDir, 'app', 'bin', 'omd')
+  if (!existsSync(omdBin)) fail(`health check failed: missing ${omdBin}`)
+  const command = existsSync(nodeBin) ? nodeBin : process.execPath
+  const result = spawnSync(command, [omdBin, '--version'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: '',
+      HOME: process.env.HOME || homedir(),
+    },
+  })
+  if (result.status !== 0) {
+    fail(`health check failed: ${result.stderr || result.stdout || 'non-zero exit'}`)
+  }
+  return String(result.stdout || '').trim()
+}
+
+async function update() {
+  const mode = distributionContext()
+  if (mode.mode !== 'portable') {
+    console.log('omd: updates in npm/source mode are managed through npm.')
+    console.log('  npm install -g oh-my-dsh@latest')
+    return
+  }
+
+  const installRoot = resolveInstallRoot(mode)
+  if (!installRoot) fail('cannot determine portable install root (set OMD_INSTALL_ROOT)')
+
+  reconcileTransactions(installRoot)
+  const lock = acquireInstallLock(installRoot)
+  let stagingDir = null
+
+  try {
+    const releaseManifest = await fetchReleaseManifest()
+    const platform = normalizePlatform()
+    const artifact = findArtifactForPlatform(releaseManifest, platform)
+    const state = readInstallState(installRoot)
+    const currentVersion =
+      state.currentVersion || mode.distributionInfo?.omdVersion || manifest.version
+
+    console.log(`omd: current ${currentVersion}, candidate ${releaseManifest.omdVersion}`)
+    if (currentVersion === releaseManifest.omdVersion) {
+      console.log('omd: already up to date')
+      return
+    }
+
+    stagingDir = mkdtempSync(join(tmpdir(), 'omd-update-staging-'))
+    const archivePath = join(stagingDir, artifact.filename)
+    await downloadToFile(artifact.url, archivePath)
+
+    const digest = sha256File(archivePath)
+    if (digest !== artifact.sha256) {
+      fail(`artifact checksum mismatch (expected ${artifact.sha256}, got ${digest})`)
+    }
+
+    const extractDir = join(stagingDir, 'extract')
+    extractTarArchive(archivePath, extractDir)
+    const versionDir = findExtractedVersionDir(extractDir)
+    runPortableHealthCheck(versionDir)
+
+    const targetDir = join(installRoot, 'versions', releaseManifest.omdVersion)
+    rmSync(targetDir, { recursive: true, force: true })
+    renameSync(versionDir, targetDir)
+    stagingDir = null
+
+    beginInstallTransaction(installRoot, {
+      op: 'update',
+      candidateVersion: releaseManifest.omdVersion,
+      oldCurrent: currentVersion,
+      oldPrevious: state.previousVersion,
+    })
+    commitInstallTransaction(installRoot, releaseManifest.omdVersion, {
+      sha256: artifact.sha256,
+      url: artifact.url,
+      platform: artifact.platform,
+    })
+
+    console.log(`omd: updated to ${releaseManifest.omdVersion}`)
+    console.log('omd: run `omd rollback` to return to the previous version if needed.')
+  } finally {
+    lock.release()
+    if (stagingDir) rmSync(stagingDir, { recursive: true, force: true })
+  }
 }
 
 function readOmdConfig() {
@@ -460,10 +791,12 @@ function usage() {
 Usage:
   omd                         Start the Web UI with the omd profile
   omd setup                   Install or upgrade the omd profiles
+  omd update                  Check for and install a newer portable release
+  omd rollback                Switch portable install back to the previous version
   omd web [options]           Start the Web UI
   omd headless "task"         Run one headless task
   omd config                  Print the composed omd Web configuration
-  omd doctor                  Check installation and profile status
+  omd doctor [--verify]       Check installation and profile status
   omd preset [list|enable|disable]
                               Manage curated MCP presets
   omd trust [list|add|remove] Manage workspaces allowed to run imported integrations
@@ -472,6 +805,9 @@ Usage:
 
 Environment:
   DSH_HOME                    Harness home (default: ~/.dsh)
+  OMD_INSTALL_ROOT            Portable install root (default: derived from layout)
+  OMD_MANIFEST_URL            Override release manifest URL for portable update
+  OMD_RELEASE_MANIFEST_PATH   Local release-manifest.json path (testing/offline)
   OMD_DSH                     Optional DeepSeek Harness source checkout
   OMD_NPM / OMD_PNPM          Package-manager command overrides
   OMD_PACKAGE_MANAGER         Source-checkout package manager (default: pnpm)
@@ -493,7 +829,13 @@ switch (command) {
     runDsh('omd', ['--dump-config', ...args])
     break
   case 'doctor':
-    doctor()
+    await doctor(args)
+    break
+  case 'update':
+    await update()
+    break
+  case 'rollback':
+    rollback()
     break
   case 'preset':
     preset(args)
