@@ -128,7 +128,9 @@ const LOCAL_NAME_SUFFIXES = ['.localhost', '.local', '.internal', '.lan', '.home
  */
 export function isPrivateHost(hostname: string): boolean {
   // WHATWG URL keeps brackets on IPv6 hostnames.
-  const host = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+  let host = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+  // A fully-qualified trailing dot ("localhost.") names the same destination.
+  if (host.endsWith('.') && host !== '.') host = host.slice(0, -1)
   if (host === 'localhost') return true
   const lower = host.toLowerCase()
   if (LOCAL_NAME_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return true

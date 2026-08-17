@@ -293,6 +293,116 @@ test('fetch-command assessment flags public shell fetches and passes local ones'
   assert.deepEqual(chained.publicUrls, ['https://example.com/payload'])
 })
 
+test('alternate IPv4 literal encodings normalize to blocked destinations', () => {
+  // WHATWG URL parsing normalizes decimal, hex, octal, and shorthand IPv4
+  // forms; every alias of a loopback or metadata address must stay blocked.
+  for (const url of [
+    'http://2130706433/', // decimal 127.0.0.1
+    'http://0x7f000001/', // hex 127.0.0.1
+    'http://017700000001/', // octal 127.0.0.1
+    'http://127.1/', // shorthand 127.0.0.1
+    'http://0x7f.1/', // mixed hex/shorthand
+    'http://2852039166/', // decimal 169.254.169.254
+    'http://[::ffff:169.254.169.254]/', // IPv4-mapped metadata address
+    'http://[0:0:0:0:0:ffff:a9fe:a9fe]/', // expanded mapped form
+  ]) {
+    assert.throws(
+      () => validateFetchUrl(url, LIMITS),
+      (error) => error.code === 'WEB_BLOCKED_URL',
+      `${url} must be blocked`,
+    )
+  }
+})
+
+test('trailing-dot hostnames are classified private before any DNS resolution', () => {
+  for (const host of ['localhost.', 'foo.localhost.', 'printer.local.', 'api.internal.']) {
+    assert.equal(isPrivateHost(host), true, `${host} must be private`)
+  }
+  assert.equal(isPrivateHost('example.com.'), false)
+  assert.throws(
+    () => validateFetchUrl('http://localhost./', LIMITS),
+    (error) => error.code === 'WEB_BLOCKED_URL',
+  )
+})
+
+test('guardedLookup rejects rebinding and public/private mixed resolutions', async () => {
+  // Rebinding: the same name resolves publicly once, then to loopback. Every
+  // connection re-validates, so the rebound resolution is refused.
+  let calls = 0
+  const rebinding = (_hostname, _options, callback) => {
+    calls += 1
+    callback(
+      null,
+      calls === 1
+        ? [{ address: '93.184.216.34', family: 4 }]
+        : [{ address: '127.0.0.1', family: 4 }],
+    )
+  }
+  const first = await new Promise((resolvePromise) => {
+    guardedLookup(
+      'rebind.example',
+      { family: 0 },
+      (error, address) => resolvePromise({ error, address }),
+      rebinding,
+    )
+  })
+  assert.equal(first.error, null)
+  assert.equal(first.address, '93.184.216.34')
+  const second = await new Promise((resolvePromise) => {
+    guardedLookup(
+      'rebind.example',
+      { family: 0 },
+      (error, address) => resolvePromise({ error, address }),
+      rebinding,
+    )
+  })
+  assert.equal(second.error?.code, 'WEB_BLOCKED_URL')
+
+  // A public/private mix is rejected outright, not retried on the public one.
+  const mixed = (_hostname, _options, callback) =>
+    callback(null, [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.5', family: 4 },
+    ])
+  const outcome = await new Promise((resolvePromise) => {
+    guardedLookup('mixed.example', { family: 0 }, (error) => resolvePromise(error), mixed)
+  })
+  assert.equal(outcome?.code, 'WEB_BLOCKED_URL')
+})
+
+test('provider rejects credentialed redirect hops and unsupported charsets', async () => {
+  const server = createServer((request, response) => {
+    if (request.url === '/cred') {
+      const port = server.address().port
+      response.writeHead(302, { location: `http://user:pass@127.0.0.1:${port}/plain` })
+      response.end()
+    } else if (request.url === '/charset') {
+      response.writeHead(200, { 'content-type': 'text/plain; charset=klingon' })
+      response.end('body')
+    } else {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end('plain')
+    }
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const base = `http://127.0.0.1:${server.address().port}`
+  const provider = new SafeFetchProvider({ ...LIMITS, allowPrivateNetwork: true })
+  try {
+    await assert.rejects(
+      provider.fetch({ url: `${base}/cred` }),
+      (error) => error.code === 'WEB_BLOCKED_URL',
+    )
+    await assert.rejects(
+      provider.fetch({ url: `${base}/charset` }),
+      (error) => error.code === 'WEB_UNSUPPORTED_CONTENT_TYPE',
+    )
+  } finally {
+    provider.dispose()
+    server.close()
+  }
+})
+
 test('workspace registration skips homes and filesystem roots', () => {
   assert.equal(isRegistrableRoot('/Users/someone', '/Users/someone'), false)
   assert.equal(isRegistrableRoot('/', '/Users/someone'), false)

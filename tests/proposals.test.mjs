@@ -140,3 +140,49 @@ test('aborting a producer lifecycle removes its pending proposals', () => {
 
   assert.equal(store.show(agent, proposal.id), undefined)
 })
+
+test('another agent cannot see, discard, or apply a foreign proposal id', async () => {
+  const store = new ProposalStore()
+  const owner = {}
+  const attacker = {}
+  const proposal = store.create(owner, input())
+
+  assert.equal(store.show(attacker, proposal.id), undefined)
+  assert.equal(store.discard(attacker, proposal.id), false)
+  await assert.rejects(store.apply(attacker, proposal.id, {}), /unknown proposal/)
+  assert.equal(store.show(owner, proposal.id)?.status, 'pending')
+})
+
+test('concurrent applies of one proposal commit exactly once', async () => {
+  const store = new ProposalStore()
+  const agent = {}
+  let commits = 0
+  let finish
+  const proposal = store.create(
+    agent,
+    input(
+      () =>
+        new Promise((resolvePromise) => {
+          commits += 1
+          finish = resolvePromise
+        }),
+    ),
+  )
+
+  const winner = store.apply(agent, proposal.id, {})
+  const loser = assert.rejects(store.apply(agent, proposal.id, {}), /not pending/)
+  finish({ summary: 'applied once' })
+
+  assert.equal((await winner).summary, 'applied once')
+  await loser
+  assert.equal(commits, 1)
+})
+
+test('discarded proposals cannot be applied afterwards', async () => {
+  const store = new ProposalStore()
+  const agent = {}
+  const proposal = store.create(agent, input())
+
+  assert.equal(store.discard(agent, proposal.id), true)
+  await assert.rejects(store.apply(agent, proposal.id, {}), /unknown proposal/)
+})

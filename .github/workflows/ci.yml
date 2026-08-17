@@ -14,11 +14,12 @@ permissions:
 
 jobs:
   quality:
-    name: Node ${{ matrix.node-version }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os == 'macos-latest' && 'macOS' || 'Linux' }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         node-version: [22, 24]
     steps:
       - uses: actions/checkout@v5
@@ -42,11 +43,49 @@ jobs:
       - name: Test
         run: pnpm test
 
+  smoke:
+    name: End-to-end smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install real profiles
+        run: node bin/omd setup
+        env:
+          DSH_HOME: ${{ runner.temp }}/dsh-home
+
+      - name: Doctor reports both profiles installed
+        run: |
+          node bin/omd doctor | tee doctor.txt
+          grep -q '^omd: installed$' doctor.txt
+          grep -q '^omd-headless: installed$' doctor.txt
+        env:
+          DSH_HOME: ${{ runner.temp }}/dsh-home
+
+      - name: Composed configuration resolves the overlay
+        run: |
+          node bin/omd config > config.txt
+          grep -q 'patched by .*oh-my-dsh' config.txt
+        env:
+          DSH_HOME: ${{ runner.temp }}/dsh-home
+
   ci:
     name: ci
     if: always()
-    needs: quality
+    needs: [quality, smoke]
     runs-on: ubuntu-latest
     steps:
-      - name: Require every matrix job to pass
-        run: test '${{ needs.quality.result }}' = 'success'
+      - name: Require every job to pass
+        run: |
+          test '${{ needs.quality.result }}' = 'success'
+          test '${{ needs.smoke.result }}' = 'success'

@@ -27,7 +27,7 @@ DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。
 
 ## 快速开始
 
-需要 Node.js `^22.19.0` 或 `>=24.0.0`。
+需要 Node.js `^22.19.0` 或 `>=24.0.0`。CI 覆盖 Linux 与 macOS（Node 22、24）；Windows 尚未测试，请使用 WSL2。
 
 ```sh
 npm install --global oh-my-dsh

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -572,4 +572,70 @@ test('bounded UTF-8 decoding preserves an existing byte-order mark', () => {
     () => decodeRefactorText(Uint8Array.from([0xff]), '/workspace/a.ts'),
     /not valid UTF-8 text/,
   )
+})
+
+test('incomplete rollback preserves a rollback-needed journal', async () => {
+  // Crash shape: the second apply write fails AND rolling back the first
+  // write fails. The journal must survive with status rollback-needed so the
+  // recovery path can restore the half-applied file later.
+  const files = [
+    { path: '/workspace/a.ts', before: 'a0', after: 'a1', version: 'a-v1' },
+    { path: '/workspace/b.ts', before: 'b0', after: 'b1', version: 'b-v1' },
+  ]
+  const journalStates = []
+  let cleared = 0
+  await assert.rejects(
+    applyWithRollback(files, {
+      saveJournal: (journalFiles, status) => {
+        journalStates.push({ status, files: journalFiles.length })
+      },
+      clearJournal: () => {
+        cleared += 1
+      },
+      write: (file, _content, _expectedVersion, phase) => {
+        if (phase === 'apply' && file.path === '/workspace/b.ts') throw new Error('disk full')
+        if (phase === 'rollback') throw new Error('rollback io error')
+        return `${file.path}-v2`
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof AggregateError)
+      assert.match(error.message, /rollback is incomplete/)
+      assert.equal(error.errors.length, 2)
+      return true
+    },
+  )
+  assert.deepEqual(journalStates, [
+    { status: 'applying', files: 2 },
+    { status: 'rollback-needed', files: 2 },
+  ])
+  assert.equal(cleared, 0)
+})
+
+test('tampered or truncated journals are rejected on read', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-refactor-tamper-'))
+  const path = join(root, 'journal.json')
+  try {
+    const valid = {
+      version: 1,
+      id: 'refactor-1',
+      cwd: '/workspace',
+      status: 'applying',
+      files: [{ path: '/workspace/a.ts', before: 'old', after: 'new' }],
+    }
+    for (const tampered of [
+      { ...valid, status: 'apply-everything' },
+      { ...valid, version: 2 },
+      { ...valid, files: [{ path: '/workspace/a.ts', before: 'old' }] },
+      { ...valid, files: [null] },
+      { ...valid, files: 'none' },
+    ]) {
+      writeFileSync(path, JSON.stringify(tampered))
+      assert.throws(() => readRefactorJournal(path), /invalid refactor journal|must be an object/)
+    }
+    writeFileSync(path, '{"version":1,')
+    assert.throws(() => readRefactorJournal(path), SyntaxError)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })

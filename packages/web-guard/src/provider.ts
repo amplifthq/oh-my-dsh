@@ -117,14 +117,16 @@ export function validateFetchUrl(
  * A `net.connect`-compatible lookup that validates every resolved address
  * before the socket dials it. A hostname resolving to ANY forbidden address is
  * rejected outright — a public/private mix is an attack shape, not a fallback
- * opportunity.
+ * opportunity. The resolver parameter exists for hermetic rebinding tests;
+ * production callers use the real `dns.lookup`.
  */
 export function guardedLookup(
   hostname: string,
   options: Parameters<LookupFunction>[1],
   callback: Parameters<LookupFunction>[2],
+  resolve: typeof dnsLookup = dnsLookup,
 ): void {
-  dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
+  resolve(hostname, { ...options, all: true }, (error, addresses) => {
     if (error !== null) {
       callback(error, '', undefined)
       return

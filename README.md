@@ -27,7 +27,7 @@ It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin
 
 ## Quick start
 
-Requires Node.js `^22.19.0` or `>=24.0.0`.
+Requires Node.js `^22.19.0` or `>=24.0.0`. CI covers Linux and macOS on Node 22 and 24; Windows is not yet tested — use WSL2.
 
 ```sh
 npm install --global oh-my-dsh
