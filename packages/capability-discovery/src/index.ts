@@ -152,7 +152,12 @@ export function formatCapabilityHits(
   hits: readonly CapabilitySearchHit[],
   options: { skillsComplete?: boolean; emptyMessage?: string } = {},
 ): string {
-  if (!hits.length) return options.emptyMessage ?? 'No matching capabilities.'
+  if (!hits.length) {
+    const empty = options.emptyMessage ?? 'No matching capabilities.'
+    return options.skillsComplete === false
+      ? `${empty} Skill discovery was incomplete, so this absence is not authoritative.`
+      : empty
+  }
   const lines = hits.map((hit) => {
     const risk = hit.risk ? ` risk=${JSON.stringify(hit.risk)}` : ''
     return (
@@ -205,7 +210,7 @@ export class CapabilityDiscoveryRuntime extends Service {
       description: 'Search tools, skills, commands, MCP servers, and curated plugins.',
       input: { hint: 'search query' },
       recordInput: false,
-      handler: async ({ agent, rawInput }) => {
+      handler: async ({ agent, rawInput, signal }) => {
         const query = rawInput.trim()
         if (!query) {
           return {
@@ -213,7 +218,7 @@ export class CapabilityDiscoveryRuntime extends Service {
             text: 'Usage: /omd-capabilities <query> — e.g. /omd-capabilities browser',
           }
         }
-        const snapshot = await this.snapshot(agent as Agent)
+        const snapshot = await this.snapshot(agent as Agent, signal)
         const hits = searchCapabilities(snapshot.capabilities, query)
         return {
           kind: 'success',
@@ -293,6 +298,7 @@ export class CapabilityDiscoveryRuntime extends Service {
   }
 
   private async collect(agent: Agent, signal?: AbortSignal): Promise<CapabilitySources> {
+    signal?.throwIfAborted()
     const tools = this.ctx.tools.schemas(agent).map((schema) => ({
       name: schema.name,
       description: schema.description ?? '',
@@ -316,11 +322,13 @@ export class CapabilityDiscoveryRuntime extends Service {
       }))
       skillsComplete = skillSnapshot.complete
     } catch (error) {
+      signal?.throwIfAborted()
       this.ctx.logger.warn(
         `oh-my-dsh: capability discovery could not read skills: ${String(error)}`,
       )
       skillsComplete = false
     }
+    signal?.throwIfAborted()
 
     const commands = this.ctx.commands.list(agent).map((command) => ({
       name: command.name,

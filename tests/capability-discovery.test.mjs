@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { Context } from '@deepseek-ai/cordis'
 
 import {
   buildCommandCapability,
@@ -14,6 +15,7 @@ import {
   showCapability,
 } from '../dist/packages/capability-discovery/src/catalog.js'
 import {
+  default as CapabilityDiscoveryRuntime,
   aggregateCapabilities,
   formatCapabilityHits,
 } from '../dist/packages/capability-discovery/src/index.js'
@@ -88,9 +90,15 @@ test('capabilityRef and parseCapabilityRef round-trip stable ids', () => {
     kind: 'skill',
     id: 'systematic-debugging',
   })
+  assert.equal(capabilityRef('mcp', ' browser '), 'mcp:%20browser%20')
+  assert.deepEqual(parseCapabilityRef('mcp:%20browser%20'), {
+    kind: 'mcp',
+    id: ' browser ',
+  })
   assert.throws(() => capabilityRef('tool', ''), /id/i)
   assert.throws(() => parseCapabilityRef('not-a-ref'), /invalid/i)
   assert.throws(() => parseCapabilityRef('unknown:thing'), /invalid/i)
+  assert.throws(() => parseCapabilityRef('constructor:thing'), /invalid/i)
 })
 
 test('builders attach exact next-action instructions for each kind', () => {
@@ -267,7 +275,85 @@ test('MCP and plugin builders never embed credential-like endpoint details beyon
     availability: 'not-installed',
   })
   assert.equal(plugin.status, 'not-installed')
-  assert.equal(plugin.nextAction.kind, 'load')
+  assert.equal(plugin.nextAction.kind, 'unavailable')
+  assert.equal(plugin.nextAction.tool, undefined)
+  assert.equal(plugin.nextAction.args, undefined)
+  assert.match(plugin.nextAction.instruction, /exact reviewed version/i)
+})
+
+test('Unicode queries match Unicode content instead of every capability', () => {
+  const catalog = [
+    buildToolCapability({
+      name: 'browser',
+      description: '浏览器自动化与页面交互。',
+    }),
+    buildToolCapability({
+      name: 'bash',
+      description: 'Run shell commands.',
+    }),
+  ]
+  assert.deepEqual(
+    searchCapabilities(catalog, '浏览器').map((hit) => hit.ref),
+    ['tool:browser'],
+  )
+  assert.deepEqual(searchCapabilities(catalog, '不存在的能力'), [])
+})
+
+test('BM25-style ranking favors rare discriminators and ignores repeated query terms', () => {
+  const catalog = [
+    buildToolCapability({ name: 'alpha', description: 'common rare-browser-capability' }),
+    buildToolCapability({ name: 'common-tool', description: 'common generic utility' }),
+    buildToolCapability({ name: 'gamma', description: 'common generic helper' }),
+    buildToolCapability({ name: 'delta', description: 'common generic command' }),
+  ]
+  const ranked = searchCapabilities(catalog, 'common rare-browser-capability')
+  assert.equal(ranked[0].ref, 'tool:alpha')
+
+  const once = searchCapabilities(catalog, 'rare-browser-capability')[0]
+  const repeated = searchCapabilities(
+    catalog,
+    'rare-browser-capability rare-browser-capability rare-browser-capability',
+  )[0]
+  assert.equal(repeated.ref, once.ref)
+  assert.equal(repeated.score, once.score)
+})
+
+test('stable refs round-trip whitespace and reserved characters', () => {
+  const entry = buildMcpCapability({
+    name: ' browser:remote ',
+    status: 'inactive',
+    source: 'user',
+    transport: 'stdio',
+    endpoint: 'npx',
+  })
+  assert.equal(entry.ref, 'mcp:%20browser%3Aremote%20')
+  assert.equal(showCapability([entry], entry.ref)?.id, ' browser:remote ')
+})
+
+test('search hits and MCP details stay bounded independently of result count', () => {
+  const cachedTools = Array.from({ length: 500 }, (_, index) => ({
+    name: `browser_tool_${index}_${'n'.repeat(300)}`,
+    description: `browser automation ${index} ${'d'.repeat(2_000)}`,
+  }))
+  const entry = buildMcpCapability({
+    name: 'huge-browser',
+    status: 'inactive',
+    source: 'user',
+    transport: 'stdio',
+    endpoint: 'npx',
+    cachedTools,
+  })
+
+  assert.equal(entry.details.cachedToolCount, 500)
+  assert.equal(entry.details.cachedToolsTruncated, true)
+  assert.ok(entry.details.cachedTools.length <= 64)
+
+  const [hit] = searchCapabilities([entry], 'browser', { limit: 1 })
+  assert.equal(hit.details, undefined)
+  assert.equal(hit.keywords, undefined)
+  assert.ok(JSON.stringify(hit).length < 10_000)
+
+  assert.throws(() => searchCapabilities([entry], 'browser', { limit: Number.NaN }), /limit/i)
 })
 
 function sampleSources(overrides = {}) {
@@ -402,6 +488,7 @@ test('incomplete skill snapshots are reported honestly', () => {
   const hits = searchCapabilities(snapshot.capabilities, 'verify')
   const text = formatCapabilityHits(hits, { skillsComplete: false })
   assert.match(text, /incomplete/i)
+  assert.match(formatCapabilityHits([], { skillsComplete: false }), /incomplete/i)
 })
 
 test('browser intent retrieves the inert Playwright MCP through aggregation', () => {
@@ -411,4 +498,158 @@ test('browser intent retrieves the inert Playwright MCP through aggregation', ()
   const hit = hits.find((hit) => hit.ref === 'mcp:omd-playwright')
   assert.equal(hit.nextAction.tool, 'mcp_control')
   assert.doesNotMatch(JSON.stringify(hit), /SECRET|password|token=/i)
+})
+
+function runtimeHarness({ skillsSnapshot, onMcpList, onPluginList } = {}) {
+  const ctx = new Context()
+  const registeredTools = new Map()
+  const registeredCommands = new Map()
+  const promptSections = []
+
+  ctx.provide('tools', {
+    register(definition) {
+      registeredTools.set(definition.name, definition)
+      return () => registeredTools.delete(definition.name)
+    },
+    schemas() {
+      return [{ name: 'bash', description: 'Run shell commands.' }]
+    },
+  })
+  ctx.provide('skills', {
+    snapshot:
+      skillsSnapshot ??
+      (async () => ({
+        complete: true,
+        skills: [
+          {
+            name: 'verify-before-done',
+            description: 'Verify before completion.',
+            invocation: { modelInvocable: true, userInvocable: true },
+            provider: 'test',
+            source: 'test',
+          },
+        ],
+      })),
+  })
+  ctx.provide('commands', {
+    register(definition) {
+      registeredCommands.set(definition.name, definition)
+      return () => registeredCommands.delete(definition.name)
+    },
+    list() {
+      return [{ name: 'omd-mcp', description: 'List MCP servers.' }]
+    },
+  })
+  ctx.provide('systemPrompt', {
+    section(section) {
+      promptSections.push(section)
+      return () => {}
+    },
+  })
+  ctx.provide('mcpControl', {
+    list() {
+      onMcpList?.()
+      return [
+        {
+          name: 'omd-playwright',
+          source: 'preset',
+          transport: 'stdio',
+          endpoint: 'npx',
+          status: 'inactive',
+          cachedTools: [{ name: 'browser_navigate', description: 'Open a page in Chromium.' }],
+        },
+      ]
+    },
+  })
+  ctx.provide('pluginControl', {
+    list() {
+      onPluginList?.()
+      return []
+    },
+  })
+
+  return { ctx, registeredTools, registeredCommands, promptSections }
+}
+
+function fakeAgent(ctx) {
+  return {
+    id: 'agent-test',
+    ctx,
+    session: { header: { cwd: '/workspace' } },
+  }
+}
+
+test('runtime registers the tool, command, and prompt and searches real service snapshots', async () => {
+  let mcpLists = 0
+  let pluginLists = 0
+  const harness = runtimeHarness({
+    onMcpList: () => {
+      mcpLists += 1
+    },
+    onPluginList: () => {
+      pluginLists += 1
+    },
+  })
+  const fiber = harness.ctx.plugin(CapabilityDiscoveryRuntime)
+  await fiber
+
+  const tool = harness.registeredTools.get('capability_search')
+  const command = harness.registeredCommands.get('omd-capabilities')
+  assert.ok(tool)
+  assert.ok(command)
+  assert.equal(harness.promptSections[0].name, 'omd:capability-discovery')
+
+  const agent = fakeAgent(harness.ctx)
+  const output = JSON.parse(
+    await tool.execute(
+      { action: 'search', query: 'browser chromium', kinds: 'mcp', limit: 5 },
+      { agent, signal: new AbortController().signal },
+    ),
+  )
+  assert.equal(output.hits[0].ref, 'mcp:omd-playwright')
+  assert.equal(output.hits[0].nextAction.tool, 'mcp_control')
+  assert.equal(mcpLists, 1)
+  assert.equal(pluginLists, 1)
+
+  const commandResult = await command.handler({
+    agent,
+    rawInput: ' browser',
+    signal: new AbortController().signal,
+  })
+  assert.equal(commandResult.kind, 'success')
+  assert.match(commandResult.text, /mcp:omd-playwright/)
+
+  await harness.ctx.root.fiber.dispose()
+})
+
+test('runtime propagates tool and command cancellation without returning partial results', async () => {
+  const skillsSnapshot = ({ signal }) =>
+    new Promise((resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  const harness = runtimeHarness({ skillsSnapshot })
+  const fiber = harness.ctx.plugin(CapabilityDiscoveryRuntime)
+  await fiber
+  const agent = fakeAgent(harness.ctx)
+  const tool = harness.registeredTools.get('capability_search')
+  const command = harness.registeredCommands.get('omd-capabilities')
+
+  const toolAbort = new AbortController()
+  const toolRun = tool.execute(
+    { action: 'search', query: 'browser' },
+    { agent, signal: toolAbort.signal },
+  )
+  toolAbort.abort(new Error('tool cancelled'))
+  await assert.rejects(toolRun, /tool cancelled/)
+
+  const commandAbort = new AbortController()
+  const commandRun = command.handler({
+    agent,
+    rawInput: ' browser',
+    signal: commandAbort.signal,
+  })
+  commandAbort.abort(new Error('command cancelled'))
+  await assert.rejects(commandRun, /command cancelled/)
+
+  await harness.ctx.root.fiber.dispose()
 })

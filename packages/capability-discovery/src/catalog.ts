@@ -16,7 +16,7 @@ export type CapabilityStatus =
   | 'incomplete'
 
 export interface CapabilityNextAction {
-  kind: 'use' | 'activate' | 'deactivate' | 'load' | 'unload'
+  kind: 'use' | 'activate' | 'deactivate' | 'load' | 'unload' | 'unavailable'
   instruction: string
   tool?: string
   args?: Record<string, unknown>
@@ -38,7 +38,7 @@ export interface CapabilityDescriptor {
   details?: Record<string, unknown>
 }
 
-export interface CapabilitySearchHit extends CapabilityDescriptor {
+export type CapabilitySearchHit = Omit<CapabilityDescriptor, 'details' | 'keywords'> & {
   score: number
 }
 
@@ -49,6 +49,25 @@ export interface CapabilitySearchOptions {
 
 const DEFAULT_LIMIT = 12
 const MAX_LIMIT = 50
+const MAX_QUERY_CHARS = 512
+const MAX_CATALOG_ENTRIES = 5_000
+const MAX_SUMMARY_CHARS = 4_096
+const MAX_PROVENANCE_CHARS = 1_024
+const MAX_RISK_CHARS = 4_096
+const MAX_MCP_TOOLS = 64
+const MAX_TOOL_NAME_CHARS = 256
+const MAX_TOOL_DESCRIPTION_CHARS = 1_024
+
+const BM25_K1 = 1.2
+const BM25_B = 0.75
+
+const FIELD_WEIGHTS = {
+  id: 8,
+  title: 6,
+  keywords: 4,
+  summary: 2,
+  context: 1,
+} as const
 
 const KIND_PREFIX: Record<CapabilityKind, string> = {
   tool: 'tool',
@@ -59,9 +78,11 @@ const KIND_PREFIX: Record<CapabilityKind, string> = {
 }
 
 export function capabilityRef(kind: CapabilityKind, id: string): string {
-  const trimmed = id.trim()
-  if (!trimmed) throw new Error('capability id must be a non-empty string')
-  return `${KIND_PREFIX[kind]}:${trimmed}`
+  if (!Object.hasOwn(KIND_PREFIX, kind)) {
+    throw new Error(`invalid capability kind ${JSON.stringify(kind)}`)
+  }
+  if (!id.trim()) throw new Error('capability id must be a non-empty string')
+  return `${KIND_PREFIX[kind]}:${encodeURIComponent(id)}`
 }
 
 export function parseCapabilityRef(ref: string): { kind: CapabilityKind; id: string } {
@@ -69,76 +90,137 @@ export function parseCapabilityRef(ref: string): { kind: CapabilityKind; id: str
   const colon = trimmed.indexOf(':')
   if (colon <= 0) throw new Error(`invalid capability ref ${JSON.stringify(ref)}`)
   const kind = trimmed.slice(0, colon) as CapabilityKind
-  const id = trimmed.slice(colon + 1).trim()
-  if (!(kind in KIND_PREFIX) || !id) {
+  if (!Object.hasOwn(KIND_PREFIX, kind)) {
     throw new Error(`invalid capability ref ${JSON.stringify(ref)}`)
   }
+  let id: string
+  try {
+    id = decodeURIComponent(trimmed.slice(colon + 1))
+  } catch {
+    throw new Error(`invalid capability ref ${JSON.stringify(ref)}`)
+  }
+  if (!id.trim()) throw new Error(`invalid capability ref ${JSON.stringify(ref)}`)
   return { kind, id }
 }
 
+function normalizeText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('und')
+}
+
 function tokens(value: string): string[] {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
+  return normalizeText(value).match(/[\p{L}\p{N}]+/gu) ?? []
 }
 
-function fieldText(entry: CapabilityDescriptor): {
-  id: string
-  title: string
-  summary: string
-  keywords: string
+function bounded(value: string, maxChars: number): string {
+  return value.length <= maxChars ? value : value.slice(0, maxChars)
+}
+
+interface IndexedCapability {
+  entry: CapabilityDescriptor
+  normalizedId: string
+  normalizedTitle: string
   all: string
-} {
-  const keywords = (entry.keywords ?? []).join(' ')
+  fields: Record<keyof typeof FIELD_WEIGHTS, string[]>
+  length: number
+}
+
+function indexCapability(entry: CapabilityDescriptor): IndexedCapability {
+  const id = bounded(entry.id, MAX_PROVENANCE_CHARS)
+  const title = bounded(entry.title, MAX_PROVENANCE_CHARS)
+  const summary = bounded(entry.summary, MAX_SUMMARY_CHARS)
+  const keywords = bounded((entry.keywords ?? []).join(' '), MAX_SUMMARY_CHARS)
+  const context = bounded(
+    [entry.risk ?? '', entry.provenance ?? ''].join(' '),
+    MAX_RISK_CHARS + MAX_PROVENANCE_CHARS,
+  )
+  const fields = {
+    id: tokens(id),
+    title: tokens(title),
+    summary: tokens(summary),
+    keywords: tokens(keywords),
+    context: tokens(context),
+  }
   return {
-    id: entry.id,
-    title: entry.title,
-    summary: entry.summary,
-    keywords,
-    all: [entry.id, entry.title, entry.summary, keywords, entry.risk ?? '', entry.provenance ?? '']
-      .join(' ')
-      .toLowerCase(),
+    entry,
+    normalizedId: normalizeText(id),
+    normalizedTitle: normalizeText(title),
+    all: normalizeText([id, title, summary, keywords, context].join(' ')),
+    fields,
+    length: Math.max(
+      1,
+      Object.values(fields).reduce((sum, field) => sum + field.length, 0),
+    ),
   }
 }
 
-/**
- * Field-weighted score: exact id/title match >> token hit on id/title >>
- * keyword/summary hits >> prefix matches. Returns 0 when nothing matches.
- */
-export function scoreCapability(entry: CapabilityDescriptor, query: string): number {
-  const raw = query.trim().toLowerCase()
-  if (!raw) return 1
+function termFrequency(field: readonly string[], term: string): number {
+  let count = 0
+  for (const candidate of field) {
+    if (candidate === term) count += 1
+  }
+  return count
+}
 
-  const fields = fieldText(entry)
-  const idLower = entry.id.toLowerCase()
-  const titleLower = entry.title.toLowerCase()
-  const queryTokens = tokens(raw)
-  if (!queryTokens.length) return 1
-
-  let score = 0
-
-  // Exact / substring boosts on identity fields.
-  if (idLower === raw || titleLower === raw) score += 100
-  else if (idLower.includes(raw) || titleLower.includes(raw)) score += 40
-  else if (fields.all.includes(raw)) score += 10
-
-  const idTokens = tokens(entry.id)
-  const titleTokens = tokens(entry.title)
-  const summaryTokens = tokens(entry.summary)
-  const keywordTokens = tokens(fields.keywords)
-
-  for (const token of queryTokens) {
-    if (idTokens.includes(token)) score += 12
-    else if (titleTokens.includes(token)) score += 10
-    else if (keywordTokens.includes(token)) score += 7
-    else if (summaryTokens.includes(token)) score += 4
-    else if (idTokens.some((candidate) => candidate.startsWith(token))) score += 3
-    else if (titleTokens.some((candidate) => candidate.startsWith(token))) score += 2
-    else if (keywordTokens.some((candidate) => candidate.startsWith(token))) score += 1
+function scoreIndexedCapabilities(
+  indexed: readonly IndexedCapability[],
+  query: string,
+): Array<{ entry: CapabilityDescriptor; score: number }> {
+  const raw = normalizeText(query.trim())
+  if (!raw) return indexed.map(({ entry }) => ({ entry, score: 1 }))
+  if (raw.length > MAX_QUERY_CHARS) {
+    throw new Error(`capability search query must be at most ${MAX_QUERY_CHARS} characters`)
   }
 
-  return score
+  // Repeating a query word must not manufacture relevance.
+  const queryTerms = [...new Set(tokens(raw))]
+  if (!queryTerms.length) return []
+
+  const averageLength =
+    indexed.reduce((sum, document) => sum + document.length, 0) / Math.max(1, indexed.length)
+  const documentFrequency = new Map<string, number>()
+  for (const term of queryTerms) {
+    documentFrequency.set(
+      term,
+      indexed.filter((document) =>
+        Object.values(document.fields).some((field) => field.includes(term)),
+      ).length,
+    )
+  }
+
+  return indexed.map((document) => {
+    let score = 0
+    if (document.normalizedId === raw || document.normalizedTitle === raw) score += 100
+    else if (document.normalizedId.includes(raw) || document.normalizedTitle.includes(raw))
+      score += 40
+    else if (queryTerms.length === 1 && document.all.includes(raw)) score += 10
+
+    for (const term of queryTerms) {
+      let weightedFrequency = 0
+      for (const [fieldName, field] of Object.entries(document.fields) as Array<
+        [keyof typeof FIELD_WEIGHTS, string[]]
+      >) {
+        weightedFrequency += FIELD_WEIGHTS[fieldName] * termFrequency(field, term)
+      }
+      if (!weightedFrequency) continue
+
+      const frequency = documentFrequency.get(term) ?? 0
+      const inverseDocumentFrequency = Math.log(
+        1 + (indexed.length - frequency + 0.5) / (frequency + 0.5),
+      )
+      const normalizedFrequency =
+        weightedFrequency / (1 - BM25_B + BM25_B * (document.length / Math.max(1, averageLength)))
+      score +=
+        inverseDocumentFrequency *
+        ((normalizedFrequency * (BM25_K1 + 1)) / (normalizedFrequency + BM25_K1))
+    }
+
+    return { entry: document.entry, score }
+  })
+}
+
+/** Score one capability with the same bounded BM25-style machinery used by catalog search. */
+export function scoreCapability(entry: CapabilityDescriptor, query: string): number {
+  return scoreIndexedCapabilities([indexCapability(entry)], query)[0]?.score ?? 0
 }
 
 export function searchCapabilities(
@@ -146,13 +228,17 @@ export function searchCapabilities(
   query: string,
   options: CapabilitySearchOptions = {},
 ): CapabilitySearchHit[] {
+  if (
+    options.limit !== undefined &&
+    (!Number.isFinite(options.limit) || !Number.isInteger(options.limit) || options.limit < 1)
+  ) {
+    throw new Error('capability search limit must be a positive finite integer')
+  }
   const kinds = options.kinds ? new Set(options.kinds) : undefined
   const limit = Math.min(Math.max(1, options.limit ?? DEFAULT_LIMIT), MAX_LIMIT)
   const filtered = kinds ? entries.filter((entry) => kinds.has(entry.kind)) : [...entries]
-
-  const scored = filtered
-    .map((entry) => ({ entry, score: scoreCapability(entry, query) }))
-    .filter(({ score }) => score > 0)
+  const indexed = filtered.slice(0, MAX_CATALOG_ENTRIES).map(indexCapability)
+  const scored = scoreIndexedCapabilities(indexed, query).filter(({ score }) => score > 0)
 
   scored.sort(
     (left, right) =>
@@ -162,7 +248,10 @@ export function searchCapabilities(
       left.entry.ref.localeCompare(right.entry.ref),
   )
 
-  return scored.slice(0, limit).map(({ entry, score }) => ({ ...entry, score }))
+  return scored.slice(0, limit).map(({ entry, score }) => {
+    const { details: _details, keywords: _keywords, ...compact } = entry
+    return { ...compact, score }
+  })
 }
 
 export function showCapability(
@@ -181,8 +270,8 @@ export function buildToolCapability(input: {
     ref: capabilityRef('tool', input.name),
     kind: 'tool',
     id: input.name,
-    title: input.name,
-    summary: input.description,
+    title: bounded(input.name, MAX_PROVENANCE_CHARS),
+    summary: bounded(input.description, MAX_SUMMARY_CHARS),
     status: 'active',
     provenance: 'model-visible-tool',
     nextAction: {
@@ -215,13 +304,13 @@ export function buildSkillCapability(input: {
     ref: capabilityRef('skill', input.name),
     kind: 'skill',
     id: input.name,
-    title: input.name,
-    summary: input.description,
+    title: bounded(input.name, MAX_PROVENANCE_CHARS),
+    summary: bounded(input.description, MAX_SUMMARY_CHARS),
     status,
-    provenance: `${input.source}/${input.provider}`,
-    keywords: input.whenToUse ? [input.whenToUse] : undefined,
+    provenance: bounded(`${input.source}/${input.provider}`, MAX_PROVENANCE_CHARS),
+    keywords: input.whenToUse ? [bounded(input.whenToUse, MAX_SUMMARY_CHARS)] : undefined,
     details: {
-      whenToUse: input.whenToUse,
+      whenToUse: input.whenToUse ? bounded(input.whenToUse, MAX_SUMMARY_CHARS) : undefined,
       modelInvocable: input.modelInvocable,
       userInvocable: input.userInvocable,
       complete: input.complete !== false,
@@ -248,11 +337,11 @@ export function buildCommandCapability(input: {
     ref: capabilityRef('command', input.name),
     kind: 'command',
     id: input.name,
-    title: `/${input.name}`,
-    summary: input.description,
+    title: bounded(`/${input.name}`, MAX_PROVENANCE_CHARS),
+    summary: bounded(input.description, MAX_SUMMARY_CHARS),
     status: 'available',
     provenance: 'slash-command',
-    keywords: input.inputHint ? [input.inputHint] : undefined,
+    keywords: input.inputHint ? [bounded(input.inputHint, MAX_SUMMARY_CHARS)] : undefined,
     nextAction: {
       kind: 'use',
       instruction: `Invoke the slash command /${input.name}${input.inputHint ? ` (${input.inputHint})` : ''}.`,
@@ -268,22 +357,32 @@ export function buildMcpCapability(input: {
   endpoint: string
   cachedTools?: Array<{ name: string; description: string }>
 }): CapabilityDescriptor {
-  const toolNames = (input.cachedTools ?? []).map((tool) => tool.name)
-  const toolDescriptions = (input.cachedTools ?? []).map((tool) => tool.description)
+  const cachedToolCount = input.cachedTools?.length ?? 0
+  const cachedTools = (input.cachedTools ?? []).slice(0, MAX_MCP_TOOLS).map((tool) => ({
+    name: bounded(tool.name, MAX_TOOL_NAME_CHARS),
+    description: bounded(tool.description, MAX_TOOL_DESCRIPTION_CHARS),
+  }))
+  const toolNames = cachedTools.map((tool) => tool.name)
+  const toolDescriptions = cachedTools.map((tool) => tool.description)
   const active = input.status === 'active'
   return {
     ref: capabilityRef('mcp', input.name),
     kind: 'mcp',
     id: input.name,
-    title: input.name,
-    summary: `${input.transport} MCP server from ${input.source} at ${input.endpoint}`,
+    title: bounded(input.name, MAX_PROVENANCE_CHARS),
+    summary: bounded(
+      `${input.transport} MCP server from ${input.source} at ${input.endpoint}`,
+      MAX_SUMMARY_CHARS,
+    ),
     status: input.status,
-    provenance: input.source,
+    provenance: bounded(input.source, MAX_PROVENANCE_CHARS),
     keywords: [...toolNames, ...toolDescriptions],
     details: {
-      transport: input.transport,
-      endpoint: input.endpoint,
-      cachedTools: input.cachedTools ?? [],
+      transport: bounded(input.transport, MAX_PROVENANCE_CHARS),
+      endpoint: bounded(input.endpoint, MAX_PROVENANCE_CHARS),
+      cachedToolCount,
+      cachedTools,
+      cachedToolsTruncated: cachedToolCount > cachedTools.length,
     },
     nextAction: active
       ? {
@@ -313,19 +412,27 @@ export function buildPluginCapability(input: {
   active: boolean
   availability: string
 }): CapabilityDescriptor {
+  const available = input.availability === 'available'
+  const unavailableAction: CapabilityNextAction = {
+    kind: 'unavailable',
+    instruction:
+      `Plugin "${input.id}" is ${input.availability}. Install the exact reviewed version ` +
+      `${input.module}@${input.version} outside the agent runtime, then search again. ` +
+      'Discovery and plugin_control never install packages.',
+  }
   return {
     ref: capabilityRef('plugin', input.id),
     kind: 'plugin',
     id: input.id,
-    title: input.id,
-    summary: input.summary,
+    title: bounded(input.id, MAX_PROVENANCE_CHARS),
+    summary: bounded(input.summary, MAX_SUMMARY_CHARS),
     status: input.active
       ? 'active'
       : input.availability === 'available'
         ? 'inactive'
         : input.availability,
-    provenance: `${input.source}:${input.module}@${input.version}`,
-    risk: input.risk,
+    provenance: bounded(`${input.source}:${input.module}@${input.version}`, MAX_PROVENANCE_CHARS),
+    risk: bounded(input.risk, MAX_RISK_CHARS),
     availability: input.availability,
     keywords: [input.module, input.risk],
     details: {
@@ -342,12 +449,14 @@ export function buildPluginCapability(input: {
           tool: 'plugin_control',
           args: { action: 'prepare_unload', plugin_id: input.id },
         }
-      : {
-          kind: 'load',
-          instruction:
-            'Use plugin_control prepare_load, then proposal_control apply with user approval. Discovery never imports the package.',
-          tool: 'plugin_control',
-          args: { action: 'prepare_load', plugin_id: input.id },
-        },
+      : available
+        ? {
+            kind: 'load',
+            instruction:
+              'Use plugin_control prepare_load, then proposal_control apply with user approval. Discovery never imports the package.',
+            tool: 'plugin_control',
+            args: { action: 'prepare_load', plugin_id: input.id },
+          }
+        : unavailableAction,
   }
 }
