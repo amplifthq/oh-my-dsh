@@ -95,17 +95,17 @@ omd trust add .
 - `proposal_control`：审批前展示命令或 URL path、脱敏后的参数、工作目录和配置来源，再应用或丢弃 proposal。
 - 停用会 dispose 上游 MCP fiber 并移除对应工具。
 
-### 精选器官银行
+### 精选插件库
 
 `plugin_control` 把同一套 proposal 平面推进到 harness 本身。它先列出或查看审查过的 dsh 插件，再为当前 session 准备装载或卸载。发现和准备 proposal 时不会 import 插件包；只有你批准 `proposal_control apply` 后，系统才会核对已安装包的精确版本，以及审查过的 `name`/`provide`/`inject` manifest，然后 import 并通过 `agent.ctx.plugin()` 挂载。卸载调用 `fiber.dispose()`，由 Cordis 按逆序撤销插件注册的 effects。
 
-这是 OMD 能授予的最高权限：插件激活后与 harness 同进程运行，拥有完整的环境变量、文件系统和网络权限。Proposal 会明确写出这一点。因此 v1 只能按 id 选择随包提供的 [`presets/plugins.json`](presets/plugins.json)；任意 npm 包名、路径、URL 和运行时安装在接口里都不可表达。`/omd-plugins` 显示银行可用性和当前 session 状态。
+这是 OMD 能授予的最高权限：插件激活后与 harness 同进程运行，拥有完整的环境变量、文件系统和网络权限。Proposal 会明确写出这一点。因此 v1 只能按 id 选择随包提供的 [`presets/plugins.json`](presets/plugins.json)；任意 npm 包名、路径、URL 和运行时安装在接口里都不可表达。`/omd-plugins` 显示插件可用性和当前 session 状态。
 
-第一版银行刻意只收一个上游器官：
+第一版插件库刻意只收一个上游插件：
 
 - `dsh-skill-badge`——提供 DeepSeek 官方署名技能；固定在审查过的 `0.1.0-rc.6`，只有经批准的 session 装载才会激活。
 
-准入和审查规则见[《器官银行策展规范》](docs/organ-bank-curation.md)。
+准入和审查规则见[《精选插件库策展规范》](docs/organ-bank-curation.md)。
 
 ### 上游不会优先做的日用工具
 

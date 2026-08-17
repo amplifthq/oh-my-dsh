@@ -95,17 +95,17 @@ Useful controls:
 - `proposal_control` shows the command or URL path, arguments with credential values redacted, working directory, and source config before applying with user approval.
 - Deactivation disposes the upstream MCP fiber and removes its tools.
 
-### Curated organ bank
+### Curated plugin catalog
 
 `plugin_control` extends the same proposal plane to the harness itself. It can list or inspect reviewed dsh plugins, then prepare a session-scoped load or unload. The package is not imported during discovery or proposal preparation. Only an approved `proposal_control apply` verifies the installed package against the exact version pin and reviewed `name`/`provide`/`inject` manifest, imports it, and mounts it through `agent.ctx.plugin()`. Unload calls `fiber.dispose()`, so Cordis reverses the plugin's registered effects in reverse order.
 
-This is the strongest grant OMD can make: an active plugin runs in-process with the harness's full environment, filesystem, and network privileges. The proposal states that explicitly. V1 therefore accepts only ids from the bundled [`presets/plugins.json`](presets/plugins.json) index; arbitrary npm names, paths, URLs, and runtime installation are not representable. `/omd-plugins` shows bank availability and session state.
+This is the strongest grant OMD can make: an active plugin runs in-process with the harness's full environment, filesystem, and network privileges. The proposal states that explicitly. V1 therefore accepts only ids from the bundled [`presets/plugins.json`](presets/plugins.json) index; arbitrary npm names, paths, URLs, and runtime installation are not representable. `/omd-plugins` shows catalog availability and session state.
 
-The deliberately small first bank contains one upstream organ:
+The deliberately small first catalog contains one upstream plugin:
 
 - `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.6` pin and is inert until an approved session load.
 
-Catalog admission and review requirements are documented in [Organ bank curation](docs/organ-bank-curation.md).
+Catalog admission and review requirements are documented in [Plugin catalog curation](docs/organ-bank-curation.md).
 
 ### Daily-use tools upstream does not prioritize
 
