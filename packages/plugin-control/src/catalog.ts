@@ -56,47 +56,47 @@ const BARE_SPECIFIER_PATTERN =
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) {
-    throw new Error(`organ ${field} must be a non-empty string`)
+    throw new Error(`plugin ${field} must be a non-empty string`)
   }
   return value.trim()
 }
 
 function requireStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
-    throw new Error(`organ manifest.${field} must be an array of non-empty strings`)
+    throw new Error(`plugin manifest.${field} must be an array of non-empty strings`)
   }
   const result = value.map((item) => item.trim())
   if (new Set(result).size !== result.length) {
-    throw new Error(`organ manifest.${field} must not contain duplicates`)
+    throw new Error(`plugin manifest.${field} must not contain duplicates`)
   }
   return result
 }
 
 function requireJsonObject(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`organ ${field} must be a JSON object`)
+    throw new Error(`plugin ${field} must be a JSON object`)
   }
   try {
     const serialized = JSON.stringify(value)
     if (serialized === undefined) throw new Error('not serializable')
     return JSON.parse(serialized) as Record<string, unknown>
   } catch {
-    throw new Error(`organ ${field} must contain only JSON-serializable values`)
+    throw new Error(`plugin ${field} must contain only JSON-serializable values`)
   }
 }
 
 function parseEntry(value: unknown, index: number): OrganIndexEntry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`organ index entry ${index} must be an object`)
+    throw new Error(`plugin index entry ${index} must be an object`)
   }
   const record = value as Record<string, unknown>
   const id = requireString(record.id, 'id')
   if (!ORGAN_ID_PATTERN.test(id)) {
-    throw new Error(`organ id ${JSON.stringify(id)} is not a safe catalog id`)
+    throw new Error(`plugin id ${JSON.stringify(id)} is not a safe catalog id`)
   }
   const module = requireString(record.module, 'module')
   if (!BARE_SPECIFIER_PATTERN.test(module)) {
-    throw new Error(`organ module ${JSON.stringify(module)} must be a bare package specifier`)
+    throw new Error(`plugin module ${JSON.stringify(module)} must be a bare package specifier`)
   }
   const version = requireString(record.version, 'version')
   const versionMatch = EXACT_SEMVER_PATTERN.exec(version)
@@ -106,12 +106,12 @@ function parseEntry(value: unknown, index: number): OrganIndexEntry {
       (identifier) => /^\d+$/.test(identifier) && identifier.length > 1 && identifier[0] === '0',
     )
   if (!versionMatch || invalidNumericPrerelease) {
-    throw new Error(`organ version ${JSON.stringify(version)} must be an exact semver pin`)
+    throw new Error(`plugin version ${JSON.stringify(version)} must be an exact semver pin`)
   }
   const summary = requireString(record.summary, 'summary')
   const risk = requireString(record.risk, 'risk')
   if (!record.manifest || typeof record.manifest !== 'object' || Array.isArray(record.manifest)) {
-    throw new Error('organ manifest must be an object')
+    throw new Error('plugin manifest must be an object')
   }
   const manifestRecord = record.manifest as Record<string, unknown>
   const manifest: OrganManifest = {
@@ -123,7 +123,7 @@ function parseEntry(value: unknown, index: number): OrganIndexEntry {
   }
   const source = requireString(record.source, 'source')
   if (source !== 'upstream' && source !== 'oh-my-dsh') {
-    throw new Error(`organ source must be "upstream" or "oh-my-dsh"`)
+    throw new Error(`plugin source must be "upstream" or "oh-my-dsh"`)
   }
   const entry: OrganIndexEntry = {
     id,
@@ -144,14 +144,14 @@ export function parseOrganIndex(json: string | unknown): OrganIndexEntry[] {
     try {
       value = JSON.parse(json)
     } catch (error) {
-      throw new Error(`organ index is not valid JSON: ${String(error)}`)
+      throw new Error(`plugin index is not valid JSON: ${String(error)}`)
     }
   }
-  if (!Array.isArray(value)) throw new Error('organ index must be an array')
+  if (!Array.isArray(value)) throw new Error('plugin index must be an array')
   const entries = value.map(parseEntry)
   const ids = new Set<string>()
   for (const entry of entries) {
-    if (ids.has(entry.id)) throw new Error(`duplicate organ id ${JSON.stringify(entry.id)}`)
+    if (ids.has(entry.id)) throw new Error(`duplicate plugin id ${JSON.stringify(entry.id)}`)
     ids.add(entry.id)
   }
   return entries
@@ -167,10 +167,10 @@ function readPackageJson(path: string): PackageJson {
   try {
     value = JSON.parse(readFileSync(path, 'utf8'))
   } catch (error) {
-    throw new Error(`cannot read organ package metadata at ${path}: ${String(error)}`)
+    throw new Error(`cannot read plugin package metadata at ${path}: ${String(error)}`)
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`organ package metadata at ${path} must be an object`)
+    throw new Error(`plugin package metadata at ${path} must be an object`)
   }
   return value as PackageJson
 }
@@ -183,7 +183,7 @@ export function resolveOrganAvailability(
   if (!resolved) return { status: 'not-installed' }
   const metadata = readPackageJson(resolved.packageJsonPath)
   if (typeof metadata.version !== 'string' || !metadata.version) {
-    throw new Error(`organ package metadata at ${resolved.packageJsonPath} has no version`)
+    throw new Error(`plugin package metadata at ${resolved.packageJsonPath} has no version`)
   }
   if (metadata.version !== entry.version) {
     return {

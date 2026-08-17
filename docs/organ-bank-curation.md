@@ -35,6 +35,8 @@ An organ is eligible only when all of the following are true:
 
 The initial design considered `dsh-attachment`, `dsh-timeout`, and `dsh-code-runtime`. They were not admitted: attachment is already backed by `dsh-attachment-local` in the base bundle, timeout is a utility library rather than a Cordis plugin, and code-runtime is an abstract service seam rather than a concrete organ.
 
+Forged plugins (`plugin_forge`) are session artifacts, not catalog entries: they live under the forged-plugin roots, are identified by source digest instead of a package pin, and never appear in `presets/plugins.json`. Promoting a forged plugin into this catalog is a phase-3 human process — a pull request with the full source, digest history, and review evidence — and the runtime never writes the catalog.
+
 ## Later phases
 
 ### Phase 2: human-run installation

@@ -70,14 +70,14 @@ export function planOrganLoad(
   configOverride: Record<string, unknown> = {},
 ): PlannedOrganLoad {
   const config = {
-    ...jsonObject(entry.config, 'organ default config'),
-    ...jsonObject(configOverride, 'organ config override'),
+    ...jsonObject(entry.config, 'plugin default config'),
+    ...jsonObject(configOverride, 'plugin config override'),
   }
   const target = `${entry.module}@${entry.version}`
   return {
     entry: structuredClone(entry),
     config,
-    title: `Load curated organ "${entry.id}"`,
+    title: `Load curated plugin "${entry.id}"`,
     summary:
       `Mount ${target} inside this agent session after approval. ` +
       `${IN_PROCESS_PRIVILEGE_WARNING}`,
@@ -85,7 +85,7 @@ export function planOrganLoad(
       {
         type: 'plugin-load',
         target,
-        summary: `Mount curated organ "${entry.id}". ${IN_PROCESS_PRIVILEGE_WARNING}`,
+        summary: `Mount curated plugin "${entry.id}". ${IN_PROCESS_PRIVILEGE_WARNING}`,
         details: jsonSafe({
           id: entry.id,
           module: entry.module,
@@ -105,7 +105,7 @@ export function planOrganLoad(
 export function planOrganUnload(active: ActiveOrganView): PlannedOrganUnload {
   return {
     active: structuredClone(active),
-    title: `Unload organ "${active.id}"`,
+    title: `Unload plugin "${active.id}"`,
     summary:
       `Dispose ${active.module}@${active.version} from this agent session and run ` +
       'its Cordis effect reversal chain.',
@@ -113,7 +113,7 @@ export function planOrganUnload(active: ActiveOrganView): PlannedOrganUnload {
       {
         type: 'plugin-unload',
         target: active.id,
-        summary: `Dispose organ "${active.id}" and reverse its live effects.`,
+        summary: `Dispose plugin "${active.id}" and reverse its live effects.`,
         details: jsonSafe({
           id: active.id,
           instanceId: active.instanceId,
@@ -155,7 +155,7 @@ export function organLoadCommit(
       commitSignal(exec, lifecycleSignal),
     )
     return {
-      summary: `Loaded organ "${loaded.id}" in Cordis state ${loaded.fiberState}.`,
+      summary: `Loaded plugin "${loaded.id}" in Cordis state ${loaded.fiberState}.`,
       details: jsonSafe(loaded),
     }
   }
@@ -169,9 +169,9 @@ export function organUnloadCommit(
   const snapshot = structuredClone(planned)
   return async () => {
     const unloaded = await controller.unload(owner, snapshot.active.id, snapshot.active.instanceId)
-    if (!unloaded) throw new Error(`organ "${snapshot.active.id}" is no longer active`)
+    if (!unloaded) throw new Error(`plugin "${snapshot.active.id}" is no longer active`)
     return {
-      summary: `Unloaded organ "${snapshot.active.id}" and reversed its Cordis effects.`,
+      summary: `Unloaded plugin "${snapshot.active.id}" and reversed its Cordis effects.`,
       details: jsonSafe({
         id: snapshot.active.id,
         reversedEffects: snapshot.active.effectLabels,
@@ -237,15 +237,15 @@ export class PluginControlRuntime extends Service {
       name: 'omd:plugin-control',
       order: 111,
       text:
-        'Harness organs are curated and inert. Use plugin_control list or show to inspect the ' +
-        'bank. prepare_load returns an exact, approval-gated proposal; never claim an organ is ' +
+        'Session plugins are curated and inert. Use plugin_control list or show to inspect the ' +
+        'catalog. prepare_load returns an exact, approval-gated proposal; never claim a plugin is ' +
         'active before an approved proposal_control apply reports Cordis state ACTIVE. Unload ' +
-        'session organs when they are no longer needed.',
+        'session plugins when they are no longer needed.',
     })
 
     ctx.commands.register({
       name: 'omd-plugins',
-      description: 'List curated harness organs and their availability in this session.',
+      description: 'List curated session plugins and their availability in this session.',
       recordInput: false,
       handler: ({ agent }) => {
         const views = this.views(agent)
@@ -259,7 +259,7 @@ export class PluginControlRuntime extends Service {
                     `${view.module}@${view.version} — ${view.summary}`,
                 )
                 .join('\n')
-            : 'No curated organs.',
+            : 'No curated plugins.',
         }
       },
     })
@@ -268,7 +268,7 @@ export class PluginControlRuntime extends Service {
       defineTool({
         name: 'plugin_control',
         description:
-          'Inspect the curated organ bank or prepare an approval-gated session plugin load/unload. Arbitrary npm packages cannot be selected.',
+          'Inspect the curated plugin catalog or prepare an approval-gated session plugin load/unload. Arbitrary npm packages cannot be selected.',
         parameters: {
           action: {
             type: 'string',
@@ -278,7 +278,7 @@ export class PluginControlRuntime extends Service {
           },
           plugin_id: {
             type: 'string',
-            description: 'Curated organ id required by show, prepare_load, and prepare_unload.',
+            description: 'Curated plugin id required by show, prepare_load, and prepare_unload.',
           },
           config: {
             type: 'object',
@@ -293,30 +293,30 @@ export class PluginControlRuntime extends Service {
         execute: async (args, exec) => {
           const agent = requireAgent(exec)
           if (args.action === 'list') {
-            return JSON.stringify({ organs: this.views(agent) }, null, 2)
+            return JSON.stringify({ plugins: this.views(agent) }, null, 2)
           }
           if (!args.plugin_id) throw new Error(`${args.action} requires plugin_id`)
           const entry = this.byId.get(args.plugin_id)
-          if (!entry) throw new Error(`unknown curated organ "${args.plugin_id}"`)
+          if (!entry) throw new Error(`unknown curated plugin "${args.plugin_id}"`)
           if (args.action === 'show') {
-            return JSON.stringify({ organ: this.view(agent, entry) }, null, 2)
+            return JSON.stringify({ plugin: this.view(agent, entry) }, null, 2)
           }
           this.ensureOwner(agent)
           if (args.action === 'prepare_load') {
             const view = this.view(agent, entry)
-            if (view.active) throw new Error(`organ "${entry.id}" is already active`)
+            if (view.active) throw new Error(`plugin "${entry.id}" is already active`)
             if (view.availability.status === 'not-installed') {
               throw new Error(
-                `organ "${entry.id}" is not installed; v1 never installs packages at runtime`,
+                `plugin "${entry.id}" is not installed; v1 never installs packages at runtime`,
               )
             }
             if (view.availability.status === 'version-drift') {
               throw new Error(
-                `organ "${entry.id}" version drift: reviewed ${view.availability.expectedVersion}, ` +
+                `plugin "${entry.id}" version drift: reviewed ${view.availability.expectedVersion}, ` +
                   `installed ${view.availability.installedVersion}`,
               )
             }
-            const planned = planOrganLoad(entry, jsonObject(args.config, 'organ config'))
+            const planned = planOrganLoad(entry, jsonObject(args.config, 'plugin config'))
             const proposal = ctx.proposals.create(agent, {
               kind: 'plugin-load',
               title: planned.title,
@@ -334,7 +334,7 @@ export class PluginControlRuntime extends Service {
             return JSON.stringify({ proposal }, null, 2)
           }
           const active = this.controller.list(agent).find((organ) => organ.id === entry.id)
-          if (!active) throw new Error(`organ "${entry.id}" is not active`)
+          if (!active) throw new Error(`plugin "${entry.id}" is not active`)
           const planned = planOrganUnload(active)
           const proposal = ctx.proposals.create(agent, {
             kind: 'plugin-unload',

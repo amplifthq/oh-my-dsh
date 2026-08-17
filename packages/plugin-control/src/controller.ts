@@ -42,13 +42,37 @@ interface LoadingOrganRecord {
   promise: Promise<LoadedOrgan>
 }
 
+export type OrganAvailabilityCheck = (entry: OrganIndexEntry) => Promise<void> | void
+
 export interface OrganControllerOptions {
   resolveModule?: OrganModuleResolver
   importModule?: OrganImporter
+  /**
+   * Verifies an entry may be imported right now. The default enforces the
+   * curated version pin; forged plugins inject a digest re-check instead.
+   */
+  checkAvailability?: OrganAvailabilityCheck
 }
 
 function defaultImportModule(specifier: string): Promise<unknown> {
   return import(specifier)
+}
+
+function defaultCheckAvailability(resolveModule: OrganModuleResolver): OrganAvailabilityCheck {
+  return (entry) => {
+    const availability = resolveOrganAvailability(entry, resolveModule)
+    if (availability.status === 'not-installed') {
+      throw new Error(
+        `plugin "${entry.id}" is not installed; v1 never installs packages at runtime`,
+      )
+    }
+    if (availability.status === 'version-drift') {
+      throw new Error(
+        `plugin "${entry.id}" version drift: reviewed ${availability.expectedVersion}, ` +
+          `installed ${availability.installedVersion}`,
+      )
+    }
+  }
 }
 
 function stateName(state: FiberState): FiberStateName {
@@ -89,7 +113,7 @@ function normalizeStringSet(value: unknown, field: string): string[] {
   if (field === 'inject' && value && typeof value === 'object') {
     return Object.keys(value).sort()
   }
-  throw new Error(`imported organ manifest ${field} is not a string, string array, or inject map`)
+  throw new Error(`imported plugin manifest ${field} is not a string, string array, or inject map`)
 }
 
 function sameSet(actual: string[], expected: string[]): boolean {
@@ -112,7 +136,7 @@ function pluginFromModule(value: unknown): Plugin {
       return namespace.default as Plugin
     }
   }
-  throw new Error('imported organ does not export a Cordis function, class, or { apply } plugin')
+  throw new Error('imported plugin does not export a Cordis function, class, or { apply } plugin')
 }
 
 function verifyManifest(entry: OrganIndexEntry, plugin: Plugin): void {
@@ -123,33 +147,34 @@ function verifyManifest(entry: OrganIndexEntry, plugin: Plugin): void {
   }
   if (entry.manifest.name !== undefined && metadata.name !== entry.manifest.name) {
     throw new Error(
-      `organ manifest name mismatch: reviewed ${JSON.stringify(entry.manifest.name)}, ` +
+      `plugin manifest name mismatch: reviewed ${JSON.stringify(entry.manifest.name)}, ` +
         `imported ${JSON.stringify(metadata.name)}`,
     )
   }
   const provide = normalizeStringSet(metadata.provide, 'provide')
   if (!sameSet(provide, entry.manifest.provide)) {
     throw new Error(
-      `organ manifest provide mismatch: reviewed ${JSON.stringify(entry.manifest.provide)}, ` +
+      `plugin manifest provide mismatch: reviewed ${JSON.stringify(entry.manifest.provide)}, ` +
         `imported ${JSON.stringify(provide)}`,
     )
   }
   const inject = normalizeStringSet(metadata.inject, 'inject')
   if (!sameSet(inject, entry.manifest.inject)) {
     throw new Error(
-      `organ manifest inject mismatch: reviewed ${JSON.stringify(entry.manifest.inject)}, ` +
+      `plugin manifest inject mismatch: reviewed ${JSON.stringify(entry.manifest.inject)}, ` +
         `imported ${JSON.stringify(inject)}`,
     )
   }
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw signal.reason ?? new Error('organ load aborted')
+  if (signal?.aborted) throw signal.reason ?? new Error('plugin load aborted')
 }
 
 export class OrganController {
   private readonly resolveModule: OrganModuleResolver
   private readonly importModule: OrganImporter
+  private readonly checkAvailability: OrganAvailabilityCheck
   private readonly byOwner = new WeakMap<object, Map<string, ActiveOrganRecord>>()
   private readonly loadingByOwner = new WeakMap<object, Map<string, LoadingOrganRecord>>()
   private readonly disposedOwners = new WeakSet<object>()
@@ -158,6 +183,8 @@ export class OrganController {
   constructor(options: OrganControllerOptions = {}) {
     this.resolveModule = options.resolveModule ?? resolveInstalledOrgan
     this.importModule = options.importModule ?? defaultImportModule
+    this.checkAvailability =
+      options.checkAvailability ?? defaultCheckAvailability(this.resolveModule)
   }
 
   async load(
@@ -169,12 +196,12 @@ export class OrganController {
   ): Promise<LoadedOrgan> {
     throwIfAborted(signal)
     if (this.disposedOwners.has(owner)) {
-      throw new Error('cannot load an organ for a disposed owner')
+      throw new Error('cannot load a plugin for a disposed owner')
     }
     const records = this.records(owner)
-    if (records.has(entry.id)) throw new Error(`organ "${entry.id}" is already active`)
+    if (records.has(entry.id)) throw new Error(`plugin "${entry.id}" is already active`)
     const loading = this.loading(owner)
-    if (loading.has(entry.id)) throw new Error(`organ "${entry.id}" is already loading`)
+    if (loading.has(entry.id)) throw new Error(`plugin "${entry.id}" is already loading`)
     const abort = new AbortController()
     const loadSignal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal
     const operation = {
@@ -200,18 +227,7 @@ export class OrganController {
   ): Promise<LoadedOrgan> {
     let fiber: Fiber | undefined
     try {
-      const availability = resolveOrganAvailability(entry, this.resolveModule)
-      if (availability.status === 'not-installed') {
-        throw new Error(
-          `organ "${entry.id}" is not installed; v1 never installs packages at runtime`,
-        )
-      }
-      if (availability.status === 'version-drift') {
-        throw new Error(
-          `organ "${entry.id}" version drift: reviewed ${availability.expectedVersion}, ` +
-            `installed ${availability.installedVersion}`,
-        )
-      }
+      await this.checkAvailability(entry)
       throwIfAborted(signal)
       const imported = await this.importModule(entry.module)
       throwIfAborted(signal)
@@ -223,12 +239,12 @@ export class OrganController {
       throwIfAborted(signal)
       if (fiber.state !== FiberState.ACTIVE) {
         throw new Error(
-          `organ "${entry.id}" did not become active (Cordis state ${stateName(fiber.state)})`,
+          `plugin "${entry.id}" did not become active (Cordis state ${stateName(fiber.state)})`,
         )
       }
       const view: ActiveOrganView = {
         id: entry.id,
-        instanceId: `organ-instance-${++this.sequence}`,
+        instanceId: `plugin-instance-${++this.sequence}`,
         module: entry.module,
         version: entry.version,
         fiberState: stateName(fiber.state),
@@ -244,7 +260,7 @@ export class OrganController {
         } catch (disposeError) {
           throw new AggregateError(
             [error, disposeError],
-            `organ "${entry.id}" failed and its fiber cleanup also failed`,
+            `plugin "${entry.id}" failed and its fiber cleanup also failed`,
           )
         }
       }
@@ -266,7 +282,7 @@ export class OrganController {
     if (!record) return false
     if (expectedInstanceId !== undefined && record.view.instanceId !== expectedInstanceId) {
       throw new Error(
-        `organ "${id}" changed since approval: reviewed instance ${expectedInstanceId}, ` +
+        `plugin "${id}" changed since approval: reviewed instance ${expectedInstanceId}, ` +
           `active instance ${record.view.instanceId}`,
       )
     }
@@ -274,7 +290,7 @@ export class OrganController {
       await record.fiber.dispose()
       if (record.fiber.state !== FiberState.DISPOSED) {
         throw new Error(
-          `organ "${id}" did not dispose cleanly (Cordis state ${stateName(record.fiber.state)})`,
+          `plugin "${id}" did not dispose cleanly (Cordis state ${stateName(record.fiber.state)})`,
         )
       }
       return true
@@ -287,7 +303,7 @@ export class OrganController {
     this.disposedOwners.add(owner)
     let firstError: unknown
     const loading = [...(this.loadingByOwner.get(owner)?.values() ?? [])]
-    for (const operation of loading) operation.abort.abort(new Error('organ owner disposed'))
+    for (const operation of loading) operation.abort.abort(new Error('plugin owner disposed'))
     for (const operation of loading) {
       if (!operation.fiber) continue
       try {

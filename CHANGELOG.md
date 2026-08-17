@@ -8,6 +8,35 @@ land in minor versions, never silently in patches).
 Upstream compatibility for each release is listed in the
 [README compatibility table](README.md#compatibility).
 
+## [0.1.6] - Unreleased
+
+### Added
+
+- Plugin forge: `plugin_forge prepare_forge` lets the agent author a small dsh
+  plugin for itself and stage the complete source inside an approval-gated
+  proposal. Only an approved `proposal_control apply` persists the source
+  (digest-pinned, atomic, containment-checked, stale-guarded — the skill-forge
+  write discipline) under `$DSH_HOME/forged-plugins/` or
+  `<workspace>/.dsh/forged-plugins/` and mounts it through the plugin-control
+  controller. Static discipline before any proposal exists: valid ESM verified
+  by `node --check` without executing, static imports only from
+  `@deepseek-ai/cordis` and `@deepseek-ai/dsh-tools` (review clarity, not a
+  sandbox), no dynamic `import()`/`require`, source ≤ 32 KiB, required
+  `name`/`apply` exports verified against the declared manifest at mount.
+  `prepare_load` remounts a forged revision in later sessions under the same
+  digest pin; `prepare_unload` reverses its Cordis effects; `/omd-forged`
+  lists revisions, digests, and session state. The commit result reports
+  observed Cordis effect labels next to the declared intended effects.
+
+### Changed
+
+- Plugin control now says "plugin" everywhere the model or the user can see it
+  (system prompt, tool and command descriptions, proposal titles and effects,
+  error messages, and the `plugin-instance-N` id prefix), finishing the
+  organ-bank → curated-plugin-catalog rename that the READMEs already adopted.
+  Internal identifiers such as `OrganController` are unchanged, and no tool
+  names, actions, or schemas changed.
+
 ## [0.1.5] - 2026-08-17
 
 ### Added

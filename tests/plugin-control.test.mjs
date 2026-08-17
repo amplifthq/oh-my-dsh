@@ -318,6 +318,40 @@ test('OrganController disposal aborts and joins an in-flight import', async () =
   await ctx.root.fiber.dispose()
 })
 
+test('an injected checkAvailability gates the load before any import', async () => {
+  fixtureOrgan.resetFixtureEvents()
+  const ctx = new Context()
+  const owner = {}
+  let imports = 0
+  const blocked = new OrganController({
+    importModule: async () => {
+      imports += 1
+      return fixtureOrgan
+    },
+    checkAvailability: () => {
+      throw new Error('injected availability failure')
+    },
+  })
+  await assert.rejects(
+    blocked.load(owner, ctx, fixtureEntry(), {}),
+    /injected availability failure/,
+  )
+  assert.equal(imports, 0)
+
+  const allowed = new OrganController({
+    importModule: async () => {
+      imports += 1
+      return fixtureOrgan
+    },
+    checkAvailability: () => {},
+  })
+  const loaded = await allowed.load(owner, ctx, fixtureEntry(), {})
+  assert.equal(loaded.fiberState, 'ACTIVE')
+  assert.equal(imports, 1)
+  await allowed.unload(owner, loaded.id, loaded.instanceId)
+  await ctx.root.fiber.dispose()
+})
+
 test('registered agent-context cleanup disposes owned organs', async () => {
   fixtureOrgan.resetFixtureEvents()
   const ctx = new Context()

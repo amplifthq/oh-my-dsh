@@ -37,6 +37,7 @@ How to move the pinned `@deepseek-ai/dsh*` release without breaking the overlay.
 | LSP `ServerConfig` + stdio transport                                   | lsp-auto; refactor's one-shot client dials the same servers |
 | `ctx.fs` versioned reads and replace-if-version writes                 | editor (`hash_edit`), refactor apply/rollback               |
 | `McpClient` plugin mount/dispose and tool namespace shape              | mcp-control activation lifecycle                            |
+| `ctx.plugin()` mount, `Fiber.await/dispose`, plugin `provide`/`inject` | plugin-control controller; plugin-forge mounts through it   |
 | `ctx.tools.schemas(scope)`, `ctx.skills.snapshot`, `ctx.commands.list` | capability-discovery unified catalog                        |
 | `decodeStorageRecord` + session log layout (`.jsonl`, `.jsonl.zstd`)   | `omd usage`                                                 |
 | Approval service semantics (`ask` is never auto-granted)               | proposals, debug, danger-full-access behavior               |

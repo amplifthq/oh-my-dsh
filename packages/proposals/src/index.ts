@@ -21,6 +21,7 @@ export type ProposalKind =
   | 'skill-write'
   | 'plugin-load'
   | 'plugin-unload'
+  | 'plugin-forge'
 
 export interface ProposalEffect {
   type: string

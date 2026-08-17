@@ -84,10 +84,15 @@
     - id: omd-mcp-control
       name: 'oh-my-dsh/mcp-control'
 
-    # Session-scoped harness organs stay inert until an approved proposal
+    # Session-scoped curated plugins stay inert until an approved proposal
     # mounts one exact-pinned entry from the curated bank.
     - id: omd-plugin-control
       name: 'oh-my-dsh/plugin-control'
+
+    # Agent-authored session plugins: full source rides an approval-gated
+    # proposal; nothing is written or mounted without an approved apply.
+    - id: omd-plugin-forge
+      name: 'oh-my-dsh/plugin-forge'
 
     # Read-only unified search across tools, skills, commands, MCP servers,
     # and curated plugins. Activation still goes through the control tools.

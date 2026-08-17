@@ -1,0 +1,16 @@
+{
+  "name": "@oh-my-dsh/plugin-forge",
+  "version": "0.1.0",
+  "description": "Forge agent-authored session plugins through approval-gated proposals.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "plugins",
+    "self-evolution"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
