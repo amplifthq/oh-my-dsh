@@ -366,10 +366,27 @@ function createTarArchive(sourceDir, archivePath, topLevelName) {
   }
 }
 
+function readSha256Sums(outDir) {
+  const sumsPath = join(outDir, 'SHA256SUMS')
+  if (!existsSync(sumsPath)) return new Map()
+  const merged = new Map()
+  for (const line of readFileSync(sumsPath, 'utf8').split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const match = trimmed.match(/^([a-f0-9]{64})\s{2}(.+)$/)
+    if (match) merged.set(match[2], match[1])
+  }
+  return merged
+}
+
 function writeSha256Sums(outDir, entries) {
-  const lines = entries
-    .sort((a, b) => a.filename.localeCompare(b.filename))
-    .map(({ filename, sha256 }) => `${sha256}  ${filename}\n`)
+  const merged = readSha256Sums(outDir)
+  for (const entry of entries) {
+    merged.set(entry.filename, entry.sha256)
+  }
+  const lines = [...merged.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([filename, sha256]) => `${sha256}  ${filename}\n`)
   writeFileSync(join(outDir, 'SHA256SUMS'), lines.join(''), 'utf8')
 }
 
@@ -430,9 +447,8 @@ async function main() {
       'utf8',
     )
 
-    const fileManifest = await generateFileManifest(versionDir)
     createAppSelfLink(appDir)
-    fileManifest.files['app/node_modules/oh-my-dsh'] = sha256Buffer('..')
+    const fileManifest = await generateFileManifest(versionDir)
     writeFileSync(
       join(versionDir, 'distribution-files.json'),
       `${JSON.stringify(fileManifest, null, 2)}\n`,

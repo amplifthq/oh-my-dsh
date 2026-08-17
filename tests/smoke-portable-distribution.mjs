@@ -1,13 +1,12 @@
 // tests/smoke-portable-distribution.mjs
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
 test('portable distribution builds, packages, and extracts with valid structure', async () => {
-  // Run packaging for current platform
   const outDir = mkdtempSync(join(tmpdir(), 'omd-pack-test-'))
   try {
     const build = spawnSync(
@@ -16,8 +15,31 @@ test('portable distribution builds, packages, and extracts with valid structure'
       { encoding: 'utf8', env: process.env },
     )
     assert.equal(build.status, 0, build.stderr)
-    // Verify files created
+
     assert.ok(existsSync(join(outDir, 'release-manifest.json')))
+    assert.ok(existsSync(join(outDir, 'SHA256SUMS')))
+
+    const archives = readdirSync(outDir).filter((entry) => entry.endsWith('.tar.gz'))
+    assert.equal(archives.length, 1, 'expected exactly one portable archive')
+    const archivePath = join(outDir, archives[0])
+
+    const extractDir = mkdtempSync(join(tmpdir(), 'omd-pack-extract-'))
+    try {
+      const extract = spawnSync('tar', ['-xzf', archivePath, '-C', extractDir], {
+        encoding: 'utf8',
+      })
+      assert.equal(extract.status, 0, extract.stderr)
+
+      const versionDirs = readdirSync(extractDir).filter((entry) => !entry.startsWith('.'))
+      assert.equal(versionDirs.length, 1, 'expected one version directory in archive')
+      const versionDir = join(extractDir, versionDirs[0])
+
+      assert.ok(existsSync(join(versionDir, 'bin', 'omd')))
+      assert.ok(existsSync(join(versionDir, 'runtime', 'bin', 'node')))
+      assert.ok(existsSync(join(versionDir, 'distribution.json')))
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
   } finally {
     rmSync(outDir, { recursive: true, force: true })
   }

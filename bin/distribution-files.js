@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { lstatSync, readdirSync, readFileSync, readlinkSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 
-function hashFileSha256(filePath) {
+function hashPathSha256(filePath) {
+  const stat = lstatSync(filePath)
+  if (stat.isSymbolicLink()) {
+    return createHash('sha256').update(readlinkSync(filePath)).digest('hex')
+  }
   const content = readFileSync(filePath)
   return createHash('sha256').update(content).digest('hex')
 }
@@ -15,7 +19,11 @@ export function collectFiles(dir, baseDir = dir, ignore = new Set()) {
     const relPath = relative(baseDir, fullPath).replace(/\\/g, '/')
     if (ignore.has(relPath) || ignore.has(entry)) continue
 
-    const stat = statSync(fullPath)
+    const stat = lstatSync(fullPath)
+    if (stat.isSymbolicLink()) {
+      results.push(relPath)
+      continue
+    }
     if (stat.isDirectory()) {
       results.push(...collectFiles(fullPath, baseDir, ignore))
     } else if (stat.isFile()) {
@@ -31,7 +39,7 @@ export async function generateFileManifest(rootDir, options = {}) {
   const files = collectFiles(resolved, resolved, ignore)
   const map = {}
   for (const file of files) {
-    map[file] = hashFileSha256(join(resolved, file))
+    map[file] = hashPathSha256(join(resolved, file))
   }
   return {
     schemaVersion: 1,
@@ -59,7 +67,7 @@ export async function verifyFileManifest(rootDir, manifest, options = {}) {
       missing.push(relPath)
       continue
     }
-    const currentHash = hashFileSha256(join(resolved, relPath))
+    const currentHash = hashPathSha256(join(resolved, relPath))
     if (currentHash !== manifest.files[relPath]) {
       mismatches.push(relPath)
     }

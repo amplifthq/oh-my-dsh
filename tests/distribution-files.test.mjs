@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { generateFileManifest, verifyFileManifest } from '../bin/distribution-files.js'
+import {
+  collectFiles,
+  generateFileManifest,
+  verifyFileManifest,
+} from '../bin/distribution-files.js'
 
 test('generateFileManifest and verifyFileManifest detect matching, modified, missing, and extra files', async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-file-manifest-'))
@@ -44,6 +48,27 @@ test('generateFileManifest and verifyFileManifest detect matching, modified, mis
     const extraCheck = await verifyFileManifest(root, manifest)
     assert.equal(extraCheck.ok, false)
     assert.deepEqual(extraCheck.extra, ['extra.txt'])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('collectFiles records symlinks without traversing into them', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-file-manifest-symlink-'))
+  try {
+    mkdirSync(join(root, 'app', 'node_modules'), { recursive: true })
+    writeFileSync(join(root, 'app', 'package.json'), '{"name":"oh-my-dsh"}\n')
+    symlinkSync('..', join(root, 'app', 'node_modules', 'oh-my-dsh'))
+
+    const files = collectFiles(root, root)
+    assert.ok(files.includes('app/node_modules/oh-my-dsh'))
+    assert.ok(!files.includes('app/node_modules/oh-my-dsh/package.json'))
+
+    const manifest = await generateFileManifest(root)
+    assert.equal(typeof manifest.files['app/node_modules/oh-my-dsh'], 'string')
+
+    const check = await verifyFileManifest(root, manifest)
+    assert.equal(check.ok, true)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
