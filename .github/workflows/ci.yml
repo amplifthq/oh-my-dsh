@@ -79,13 +79,62 @@ jobs:
         env:
           DSH_HOME: ${{ runner.temp }}/dsh-home
 
+  portable-matrix:
+    name: Portable / ${{ matrix.os == 'macos-latest' && 'darwin-arm64' || 'linux-x64' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package portable distribution
+        run: node scripts/build-portable-distribution.mjs --out-dir dist-release
+
+      - name: Smoke-test unpacked portable archive
+        run: |
+          set -eu
+          test_root="${{ runner.temp }}/portable-smoke"
+          extract_dir="${test_root}/extract"
+          mkdir -p "$extract_dir"
+
+          archive="$(ls dist-release/*.tar.gz | head -1)"
+          tar -xzf "$archive" -C "$extract_dir"
+          version_dir="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d | head -1)"
+
+          export HOME="${{ runner.temp }}/portable-home"
+          export DSH_HOME="${{ runner.temp }}/portable-dsh-home"
+          mkdir -p "$HOME" "$DSH_HOME"
+
+          # Sterile PATH: no system Node from the runner toolchain.
+          export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+
+          "$version_dir/bin/omd" --version
+          "$version_dir/bin/omd" doctor --verify
+          "$version_dir/bin/omd" preset list
+
   ci:
     name: ci
     if: always()
-    needs: [quality, smoke]
+    needs: [quality, smoke, portable-matrix]
     runs-on: ubuntu-latest
     steps:
       - name: Require every job to pass
         run: |
           test '${{ needs.quality.result }}' = 'success'
           test '${{ needs.smoke.result }}' = 'success'
+          test '${{ needs.portable-matrix.result }}' = 'success'
