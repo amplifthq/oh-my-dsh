@@ -47,6 +47,14 @@ jobs:
           test "$exported" = "$manifest" || { echo "src/index.ts exports $exported but package.json says $manifest" >&2; exit 1; }
 
       - name: Publish
-        run: npm publish --provenance --access public
+        # Idempotent: a tag whose version is already on the registry (e.g. a
+        # release published locally) records green instead of failing.
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "oh-my-dsh@$version" version > /dev/null 2>&1; then
+            echo "oh-my-dsh@$version already exists on npm; skipping publish." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
