@@ -8,6 +8,51 @@ land in minor versions, never silently in patches).
 Upstream compatibility for each release is listed in the
 [README compatibility table](README.md#compatibility).
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- Portable distribution for macOS arm64 and Linux x64 (glibc): self-contained
+  archives embed an exact official Node.js runtime, a hoisted production
+  dependency closure, and immutable build identity (`distribution.json`,
+  `distribution-files.json`, SPDX SBOM). No system Node.js, npm, or root
+  access is required.
+- Bootstrap installer (`install.sh`): downloads the stable-channel release
+  manifest, verifies SHA-256 digests, extracts atomically, runs a health
+  check without system Node.js on `PATH`, and links `~/.local/bin/omd`.
+- `omd update`: foreground portable update through the stable channel with
+  exclusive locking, digest verification, health check, and atomic `current`
+  switch. Already-current installs exit without mutation.
+- `omd rollback`: switches `current` to the retained `previous` version after
+  validating embedded distribution identity. Reversible and offline; never
+  modifies `DSH_HOME`.
+- `omd doctor --verify`: verifies every file in the selected portable version
+  against the embedded SHA-256 manifest in `distribution-files.json`.
+- Dual-channel releases: npm package (developer/composition channel) and
+  portable artifacts (end-user channel) share the same OMD version from one tag.
+- Curated plugin catalog: admitted the first community entry,
+  `dsh-pkg-info@0.1.1`, after reviewing the exact npm artifact and source
+  commit. An approved session load adds the read-only `pkg_info` tool for
+  npm and PyPI registry metadata queries; unload removes it through the
+  real Cordis effect chain. The curation ledger records the rejected
+  candidates and their concrete SSRF, containment, mount-side-effect, or
+  runtime-schema failures.
+
+### Changed
+
+- README quick start leads with the portable bootstrap installer, followed by
+  manual tarball verification and npm options. Capability tiers (Core, Bundled
+  Optional, Curated Integrations, User Growth) are documented explicitly.
+- Community catalog entries now require machine-readable repository,
+  publisher, npm SHA-512 integrity, and optional reviewed-commit provenance.
+  The same evidence is copied into the load proposal for approval.
+- Portable `omd setup` symlinks profile `node_modules` to the immutable
+  closure instead of calling npm. npm-mode setup behavior is unchanged.
+
+## [0.1.7] - Unreleased
+
+_Superseded by 0.2.0._
+
 ## [0.1.6] - 2026-08-17
 
 ### Added

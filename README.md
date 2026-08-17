@@ -27,7 +27,42 @@ It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin
 
 ## Quick start
 
-Requires Node.js `^22.19.0` or `>=24.0.0`. CI covers Linux and macOS on Node 22 and 24; Windows is not yet tested — use WSL2.
+Portable releases ship a self-contained Node.js runtime and production dependency closure for **macOS arm64** and **Linux x64 (glibc)**. No system Node.js, npm, pnpm, or root access is required. CI covers Linux and macOS on Node 22 and 24; Windows is not yet tested — use WSL2.
+
+### Portable install (recommended)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/main/install.sh | sh
+omd setup
+omd
+```
+
+Pin a release tag instead of `main`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/v0.2.0/install.sh | sh
+```
+
+The bootstrap installs under `~/.local/share/oh-my-dsh/`, links `~/.local/bin/omd`, and runs a health check without system Node.js on `PATH`. If `~/.local/bin` is not on your `PATH`, the installer prints the exact export command for your shell.
+
+The first setup can take several minutes. It installs two isolated profiles under `~/.dsh/profiles/`:
+
+- `omd` — interactive Web UI.
+- `omd-headless` — one-shot terminal tasks.
+
+### Manual archive install
+
+Download the platform tarball, `SHA256SUMS`, and `release-manifest.json` from [GitHub Releases](https://github.com/amplifthq/oh-my-dsh/releases). Verify the digest, extract, and run the packaged `bin/omd setup`.
+
+On macOS, browser-downloaded archives may carry a quarantine attribute that Gatekeeper blocks. Clear it before running:
+
+```sh
+xattr -dr com.apple.quarantine oh-my-dsh-v0.2.0-darwin-arm64.tar.gz
+```
+
+### npm install (developers)
+
+The npm package is the developer and composition channel. It requires Node.js `^22.19.0` or `>=24.0.0` on your machine:
 
 ```sh
 npm install --global oh-my-dsh
@@ -35,17 +70,71 @@ omd setup
 omd
 ```
 
-The first setup can take several minutes. It installs two isolated profiles under `~/.dsh/profiles/`:
-
-- `omd` — interactive Web UI.
-- `omd-headless` — one-shot terminal tasks.
-
 Prefer not to install globally?
 
 ```sh
 npx oh-my-dsh@latest setup
 npx oh-my-dsh@latest
 ```
+
+Both channels share the same OMD version and Cordis composition. A release is incomplete until npm and every required portable artifact have passed their checks.
+
+## Distribution channels
+
+| Channel      | Audience                                            | Runtime                         | Install                                  |
+| ------------ | --------------------------------------------------- | ------------------------------- | ---------------------------------------- |
+| **Portable** | End users                                           | Embedded Node.js in the archive | `install.sh` bootstrap or manual tarball |
+| **npm**      | Developers, custom profiles, downstream composition | Your Node.js                    | `npm install -g` or `npx`                |
+
+Portable mode is detected from embedded `distribution.json`, not from an environment variable. User state (`~/.dsh/`) is shared between channels, but each profile's `node_modules` is owned by one channel at a time: portable setup symlinks to the immutable closure; npm setup materializes with npm. Neither touches your `cordis.patch.yml`.
+
+## Updating, rollback, and verification
+
+Portable installs support foreground update and rollback without touching user data:
+
+```sh
+omd update                  # check stable channel, download, verify, and switch
+omd rollback              # switch back to the retained previous version
+omd doctor --verify       # verify every file in the selected version against distribution-files.json
+```
+
+`omd update` acquires an exclusive lock, verifies SHA-256 digests, runs a health check, and atomically switches `current` only after validation. It never updates a running process or runs in the background. When already current, it exits successfully without mutation.
+
+`omd rollback` switches `current` to the retained `previous` version after checking embedded distribution identity. The version being replaced becomes the new rollback target, so rollback is reversible. It performs no network access and does not modify `~/.dsh/`.
+
+In npm or source mode, `omd update` and `omd rollback` explain that version management goes through npm.
+
+`omd doctor` reports distribution identity (version, platform, upstream dsh pin, embedded Node.js) in portable mode. With `--verify`, it checks every file under the selected version against the embedded SHA-256 manifest.
+
+## Uninstall
+
+Portable uninstall is manual:
+
+```sh
+rm -rf ~/.local/share/oh-my-dsh
+rm ~/.local/bin/omd
+```
+
+`~/.dsh/` holds your profiles, sessions, skills, forged plugins, and patches. OMD never deletes it during update, rollback, or uninstall.
+
+npm uninstall:
+
+```sh
+npm uninstall -g oh-my-dsh
+```
+
+## Capability tiers
+
+OMD classifies every capability into one of four tiers:
+
+| Tier                     | Meaning                                                                             | Examples                                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Core**                 | Ships in the artifact and is enabled by the default composition                     | Upstream web/headless runtime, OMD first-party plugins, proposal controls, hardened web fetch, bundled language servers |
+| **Bundled optional**     | Ships in the closure but inert until explicitly activated through the approval path | Curated plugin catalog: `dsh-skill-badge`, `dsh-pkg-info`                                                               |
+| **Curated integrations** | Reviewed metadata, setup guidance, or skills; external runtime not in the base      | browser-use CLI, Playwright MCP, Context7 — require separate installation and have their own network behavior           |
+| **User growth**          | Lives outside the immutable base; survives update and rollback                      | User skills, Plugin Forge output, local MCP definitions, forged plugins, trust decisions                                |
+
+Features with external prerequisites are documented as curated integrations, not as "included" or "works out of the box."
 
 ## What you get
 
@@ -101,11 +190,12 @@ Useful controls:
 
 This is the strongest grant OMD can make: an active plugin runs in-process with the harness's full environment, filesystem, and network privileges. The proposal states that explicitly. V1 therefore accepts only ids from the bundled [`presets/plugins.json`](presets/plugins.json) index; arbitrary npm names, paths, URLs, and runtime installation are not representable. `/omd-plugins` shows catalog availability and session state.
 
-The deliberately small first catalog contains one upstream plugin:
+The deliberately small catalog currently contains two reviewed plugins:
 
 - `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.6` pin and is inert until an approved session load.
+- `dsh-pkg-info` — adds a read-only `pkg_info` tool for public npm and PyPI metadata. The catalog pins the reviewed community artifact at `0.1.1`, records its repository, publisher, npm integrity, and source commit, and states its registry network and public-metadata exposure before approval.
 
-Catalog admission and review requirements are documented in [Plugin catalog curation](docs/organ-bank-curation.md).
+Catalog admission, rejection evidence, and review requirements are documented in [Plugin catalog curation](docs/organ-bank-curation.md).
 
 ### Plugin forge
 
@@ -137,7 +227,9 @@ Static discipline is enforced before a proposal can exist: valid ESM only (V8 pa
 omd                              # start the Web UI
 omd headless "fix the tests"     # run one task and exit
 omd setup                        # install or upgrade both profiles
-omd doctor                       # installation status, web fetch posture, exposed listeners
+omd update                       # portable: check stable channel and install a newer release
+omd rollback                     # portable: switch back to the retained previous version
+omd doctor [--verify]            # installation status; --verify checks file digests (portable)
 omd config                       # print the final Cordis composition
 omd usage                        # aggregate saved-session token usage
 omd preset list                  # list curated MCP presets
@@ -218,9 +310,10 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 
 ## Compatibility
 
-| oh-my-dsh | DeepSeek Harness (`@deepseek-ai/dsh*`) | Node.js                  |
-| --------- | -------------------------------------- | ------------------------ |
-| 0.1.x     | `0.1.0-rc.6` (exact pin)               | `^22.19.0 \|\| >=24.0.0` |
+| oh-my-dsh | DeepSeek Harness (`@deepseek-ai/dsh*`) | Node.js / runtime                                     |
+| --------- | -------------------------------------- | ----------------------------------------------------- |
+| 0.2.x     | `0.1.0-rc.6` (exact pin)               | Embedded (portable) or `^22.19.0 \|\| >=24.0.0` (npm) |
+| 0.1.x     | `0.1.0-rc.6` (exact pin)               | `^22.19.0 \|\| >=24.0.0`                              |
 
 Upstream is in developer preview, so `oh-my-dsh` pins one tested release and never follows breaking changes silently. A [weekly canary workflow](.github/workflows/canary.yml) additionally tests the overlay against `dsh@next`, so an incompatible upcoming release is filed as an issue before it ships. Upgrades follow [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md).
 

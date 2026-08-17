@@ -27,7 +27,42 @@ DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。
 
 ## 快速开始
 
-需要 Node.js `^22.19.0` 或 `>=24.0.0`。CI 覆盖 Linux 与 macOS（Node 22、24）；Windows 尚未测试，请使用 WSL2。
+便携版发行包自带 Node.js 运行时和生产依赖闭包，支持 **macOS arm64** 和 **Linux x64（glibc）**。无需系统 Node.js、npm、pnpm 或 root 权限。CI 覆盖 Linux 与 macOS（Node 22、24）；Windows 尚未测试，请使用 WSL2。
+
+### 便携版安装（推荐）
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/main/install.sh | sh
+omd setup
+omd
+```
+
+固定 release tag 而非 `main`：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/v0.2.0/install.sh | sh
+```
+
+引导脚本安装到 `~/.local/share/oh-my-dsh/`，链接 `~/.local/bin/omd`，并在 `PATH` 不含系统 Node.js 的情况下运行健康检查。若 `~/.local/bin` 不在 `PATH` 中，安装器会打印当前 shell 的 export 命令。
+
+第一次 setup 可能需要几分钟。它会在 `~/.dsh/profiles/` 下安装两个隔离 profile：
+
+- `omd`：交互式 Web UI。
+- `omd-headless`：一次性终端任务。
+
+### 手动归档安装
+
+从 [GitHub Releases](https://github.com/amplifthq/oh-my-dsh/releases) 下载平台 tarball、`SHA256SUMS` 和 `release-manifest.json`。校验 digest 后解压，运行包内 `bin/omd setup`。
+
+在 macOS 上，浏览器下载的归档可能带有 quarantine 属性，Gatekeeper 会阻止运行。运行前清除：
+
+```sh
+xattr -dr com.apple.quarantine oh-my-dsh-v0.2.0-darwin-arm64.tar.gz
+```
+
+### npm 安装（开发者）
+
+npm 包面向开发者和组合场景，需要本机 Node.js `^22.19.0` 或 `>=24.0.0`：
 
 ```sh
 npm install --global oh-my-dsh
@@ -35,17 +70,71 @@ omd setup
 omd
 ```
 
-第一次 setup 可能需要几分钟。它会在 `~/.dsh/profiles/` 下安装两个隔离 profile：
-
-- `omd`：交互式 Web UI。
-- `omd-headless`：一次性终端任务。
-
 不想全局安装也可以使用：
 
 ```sh
 npx oh-my-dsh@latest setup
 npx oh-my-dsh@latest
 ```
+
+两个渠道共享同一 OMD 版本和 Cordis 组合。只有 npm 和所有必需的便携版 artifact 都通过检查，release 才算完整。
+
+## 发行渠道
+
+| 渠道       | 受众                             | 运行时           | 安装方式                        |
+| ---------- | -------------------------------- | ---------------- | ------------------------------- |
+| **便携版** | 终端用户                         | 归档内嵌 Node.js | `install.sh` 引导或手动 tarball |
+| **npm**    | 开发者、自定义 profile、下游组合 | 自备 Node.js     | `npm install -g` 或 `npx`       |
+
+便携模式由内嵌 `distribution.json` 检测，不依赖环境变量。用户状态（`~/.dsh/`）在两个渠道间共享，但每个 profile 的 `node_modules` 同时只归一个渠道所有：便携版 setup 符号链接到不可变闭包；npm setup 用 npm 物化。两者都不会改动你的 `cordis.patch.yml`。
+
+## 更新、回滚与校验
+
+便携版安装支持前台更新和回滚，不会触碰用户数据：
+
+```sh
+omd update                  # 检查 stable 渠道、下载、校验并切换
+omd rollback              # 切回保留的上一版本
+omd doctor --verify       # 对照 distribution-files.json 校验当前版本每个文件
+```
+
+`omd update` 获取独占锁，校验 SHA-256 digest，运行健康检查，仅在验证通过后原子切换 `current`。它不会更新已在运行的进程，也不会在后台运行。已是最新版本时，成功退出且不改动任何内容。
+
+`omd rollback` 在校验内嵌 distribution identity 后，将 `current` 切到保留的 `previous` 版本。被替换的版本成为新的回滚目标，因此回滚可逆。它不访问网络，也不修改 `~/.dsh/`。
+
+npm 或源码模式下，`omd update` 和 `omd rollback` 会说明版本管理应通过 npm 进行。
+
+便携模式下 `omd doctor` 报告 distribution identity（版本、平台、上游 dsh pin、内嵌 Node.js）。加 `--verify` 时，对照内嵌 SHA-256 manifest 校验所选版本下的每个文件。
+
+## 卸载
+
+便携版卸载需手动执行：
+
+```sh
+rm -rf ~/.local/share/oh-my-dsh
+rm ~/.local/bin/omd
+```
+
+`~/.dsh/` 存放 profile、session、skill、锻造插件和 patch。OMD 在更新、回滚或卸载时从不删除它。
+
+npm 卸载：
+
+```sh
+npm uninstall -g oh-my-dsh
+```
+
+## 能力分层
+
+OMD 将每项能力归入四个层级之一：
+
+| 层级                                 | 含义                                                       | 示例                                                                                        |
+| ------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Core（核心）**                     | 随 artifact 发布，默认组合已启用                           | 上游 web/headless 运行时、OMD 一阶插件、proposal 控制、加固 web fetch、内置 language server |
+| **Bundled optional（随包可选）**     | 在闭包中但保持惰性，需经审批路径显式激活                   | 精选插件库：`dsh-skill-badge`、`dsh-pkg-info`                                               |
+| **Curated integrations（精选集成）** | 审查过的元数据、setup 指引或 skill；外部运行时不在 base 中 | browser-use CLI、Playwright MCP、Context7——需单独安装，有各自的网络行为                     |
+| **User growth（用户增长）**          | 在不可变 base 之外；更新和回滚后保留                       | 用户 skill、Plugin Forge 产物、本地 MCP 定义、锻造插件、信任决策                            |
+
+有外部前置条件的功能记为 curated integration，不称为「内置」或「开箱即用」。
 
 ## 你会得到什么
 
@@ -101,11 +190,12 @@ omd trust add .
 
 这是 OMD 能授予的最高权限：插件激活后与 harness 同进程运行，拥有完整的环境变量、文件系统和网络权限。Proposal 会明确写出这一点。因此 v1 只能按 id 选择随包提供的 [`presets/plugins.json`](presets/plugins.json)；任意 npm 包名、路径、URL 和运行时安装在接口里都不可表达。`/omd-plugins` 显示插件可用性和当前 session 状态。
 
-第一版插件库刻意只收一个上游插件：
+精选插件库目前刻意只收两个通过审查的插件：
 
 - `dsh-skill-badge`——提供 DeepSeek 官方署名技能；固定在审查过的 `0.1.0-rc.6`，只有经批准的 session 装载才会激活。
+- `dsh-pkg-info`——提供只读的 `pkg_info` 工具，查询公开 npm / PyPI 元数据；固定在审查过的社区制品 `0.1.1`，目录记录其仓库、发布者、npm integrity 和源码 commit，并在审批前明确注册表网络访问（含默认重定向行为）及公开元数据暴露风险。
 
-准入和审查规则见[《精选插件库策展规范》](docs/organ-bank-curation.md)。
+准入、拒绝证据和审查规则见[《精选插件库策展规范》](docs/organ-bank-curation.md)。
 
 ### 插件锻造
 
@@ -137,7 +227,9 @@ omd trust add .
 omd                              # 启动 Web UI
 omd headless "修复失败的测试"     # 运行一个任务后退出
 omd setup                        # 安装或升级两个 profiles
-omd doctor                       # 安装状态、fetch 安全姿态、暴露的监听端口
+omd update                       # 便携版：检查 stable 渠道并安装新版本
+omd rollback                     # 便携版：切回保留的上一版本
+omd doctor [--verify]            # 安装状态；--verify 校验文件 digest（便携版）
 omd config                       # 输出最终 Cordis 组合
 omd usage                        # 汇总已保存会话的 token usage
 omd preset list                  # 查看精选 MCP 预设
@@ -218,9 +310,10 @@ OMD_ENABLE_DEBUG=1 omd
 
 ## 兼容性
 
-| oh-my-dsh | DeepSeek Harness（`@deepseek-ai/dsh*`） | Node.js                  |
-| --------- | --------------------------------------- | ------------------------ |
-| 0.1.x     | `0.1.0-rc.6`（精确锁定）                | `^22.19.0 \|\| >=24.0.0` |
+| oh-my-dsh | DeepSeek Harness（`@deepseek-ai/dsh*`） | Node.js / 运行时                                 |
+| --------- | --------------------------------------- | ------------------------------------------------ |
+| 0.2.x     | `0.1.0-rc.6`（精确锁定）                | 内嵌（便携版）或 `^22.19.0 \|\| >=24.0.0`（npm） |
+| 0.1.x     | `0.1.0-rc.6`（精确锁定）                | `^22.19.0 \|\| >=24.0.0`                         |
 
 上游仍处于 developer preview，因此 `oh-my-dsh` 锁定一个经过验证的版本，绝不静默追随破坏性变更。[每周 canary 工作流](.github/workflows/canary.yml)会额外用 `dsh@next` 测试 overlay，上游即将发布的不兼容变更会先变成 issue，而不是先砸到用户。升级流程见 [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md)。
 
