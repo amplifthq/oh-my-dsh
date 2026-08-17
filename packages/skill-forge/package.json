@@ -1,0 +1,16 @@
+{
+  "name": "@oh-my-dsh/skill-forge",
+  "version": "0.1.0",
+  "description": "Distill session-verified procedures into durable skills through approval-gated proposals.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "skills",
+    "distillation"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

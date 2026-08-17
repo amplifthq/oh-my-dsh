@@ -8,6 +8,30 @@ land in minor versions, never silently in patches).
 Upstream compatibility for each release is listed in the
 [README compatibility table](README.md#compatibility).
 
+## [0.1.5] - Unreleased
+
+### Added
+
+- Skill forge: `skill_control prepare_save` distills a session-verified
+  procedure into a durable `SKILL.md`, and `/omd-distill [focus]` queues a
+  drafting turn. Saves flow through the proposal plane — the proposal carries
+  the exact before/after file content and secret-content warnings, and only an
+  approved `proposal_control apply` writes the file (atomic temp+rename,
+  containment-checked after path resolution, SHA-256 stale guard against
+  concurrent edits, symlinked targets rejected). Scope `project` writes
+  `<workspace>/.dsh/skills/<slug>/SKILL.md`, scope `user` writes
+  `$DSH_HOME/skills/<slug>/SKILL.md`; the upstream skill watcher picks new
+  files up live. Content bounds: slug ≤ 41 chars, single-line description
+  ≤ 500 chars, body ≤ 32 KiB.
+- Plugin control and its curated organ bank: `plugin_control` lists and inspects
+  exact-pinned entries, then prepares session-scoped load/unload proposals.
+  Discovery and proposal preparation import no plugin code; approved load
+  rechecks the installed version and reviewed `name`/`provide`/`inject`
+  manifest before `agent.ctx.plugin()` mounts it. Unload and agent teardown
+  await Cordis effect reversal. Arbitrary packages and runtime installation
+  are unrepresentable in v1. The first bank entry is the upstream
+  `dsh-skill-badge@0.1.0-rc.6`.
+
 ## [0.1.4] - 2026-08-17
 
 First release cut from a tagged commit through the provenance-signed release

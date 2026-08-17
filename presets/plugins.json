@@ -1,0 +1,16 @@
+[
+  {
+    "id": "dsh-skill-badge",
+    "module": "@deepseek-ai/dsh-skill-badge",
+    "version": "0.1.0-rc.6",
+    "summary": "Expose the upstream dsh-badge skill for attribution in generated documents and pull requests.",
+    "risk": "Adds model-visible instructions that may insert DeepSeek Harness attribution into generated content.",
+    "manifest": {
+      "name": "skill-badge",
+      "provide": [],
+      "inject": ["skills"]
+    },
+    "config": {},
+    "source": "upstream"
+  }
+]

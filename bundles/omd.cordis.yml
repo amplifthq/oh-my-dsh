@@ -76,8 +76,18 @@
     - id: omd-proposals
       name: 'oh-my-dsh/proposals'
 
+    # Distill session-verified procedures into durable skills; writes go
+    # through the proposal plane and the upstream skill watcher picks them up.
+    - id: omd-skill-forge
+      name: 'oh-my-dsh/skill-forge'
+
     - id: omd-mcp-control
       name: 'oh-my-dsh/mcp-control'
+
+    # Session-scoped harness organs stay inert until an approved proposal
+    # mounts one exact-pinned entry from the curated bank.
+    - id: omd-plugin-control
+      name: 'oh-my-dsh/plugin-control'
 
     - id: omd-refactor
       name: 'oh-my-dsh/refactor'

@@ -19,7 +19,7 @@
   <a href="README.md">English</a> | 中文
 </p>
 
-DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、默认开启的 SSRF 加固网页抓取、可选 DAP 调试、通知、usage 汇总和持久代码 kernel。
+DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、默认开启的 SSRF 加固网页抓取、可选 DAP 调试、通知、usage 汇总、持久代码 kernel，以及经审批把验证过的流程蒸馏成可复用技能的 skill forge。
 
 它是 Cordis bundle，不是 fork。上游“一切皆插件”的架构保持不变，每项默认选择都可以覆盖。
 
@@ -95,6 +95,18 @@ omd trust add .
 - `proposal_control`：审批前展示命令或 URL path、脱敏后的参数、工作目录和配置来源，再应用或丢弃 proposal。
 - 停用会 dispose 上游 MCP fiber 并移除对应工具。
 
+### 精选器官银行
+
+`plugin_control` 把同一套 proposal 平面推进到 harness 本身。它先列出或查看审查过的 dsh 插件，再为当前 session 准备装载或卸载。发现和准备 proposal 时不会 import 插件包；只有你批准 `proposal_control apply` 后，系统才会核对已安装包的精确版本，以及审查过的 `name`/`provide`/`inject` manifest，然后 import 并通过 `agent.ctx.plugin()` 挂载。卸载调用 `fiber.dispose()`，由 Cordis 按逆序撤销插件注册的 effects。
+
+这是 OMD 能授予的最高权限：插件激活后与 harness 同进程运行，拥有完整的环境变量、文件系统和网络权限。Proposal 会明确写出这一点。因此 v1 只能按 id 选择随包提供的 [`presets/plugins.json`](presets/plugins.json)；任意 npm 包名、路径、URL 和运行时安装在接口里都不可表达。`/omd-plugins` 显示银行可用性和当前 session 状态。
+
+第一版银行刻意只收一个上游器官：
+
+- `dsh-skill-badge`——提供 DeepSeek 官方署名技能；固定在审查过的 `0.1.0-rc.6`，只有经批准的 session 装载才会激活。
+
+准入和审查规则见[《器官银行策展规范》](docs/organ-bank-curation.md)。
+
 ### 上游不会优先做的日用工具
 
 - `@file` 引用：在消息中用 `@path`、`@path:12-40` 或 `@"带空格的路径"` 引用工作区文件。被引用内容随同一 model step 注入、有大小上限，并渲染为 `hash_edit` 可直接使用的 anchor。仅做文本解析（输入框没有自动补全）；工作区之外的文件永远不会被注入。
@@ -105,6 +117,7 @@ omd trust add .
 - `/usage` 显示当前会话；`omd usage` 汇总已持久化会话。
 - 默认关闭的 DAP 调试：`debug_control` 为 `debugpy`、`lldb-dap` 或自定义 stdio adapter 准备 launch/attach proposal；只有批准后的 apply 才会启动 adapter 和被调试进程。
 - 默认关闭的精选 MCP 预设：`memory`、`context7`、`playwright`。
+- Skill forge：`skill_control prepare_save` 把本次会话里真正执行并验证过的流程蒸馏成持久的 `SKILL.md`；`/omd-distill [焦点]` 会排入一个起草回合。Proposal 携带精确的写前/写后全文和疑似密钥告警；只有你批准 `proposal_control apply` 后才落盘——原子写入、路径包含性校验、并发修改守卫。scope `project` 写入 `<workspace>/.dsh/skills/`（仅本仓库），scope `user` 写入 `$DSH_HOME/skills/`（所有项目）。上游 skill watcher 实时感知新文件，同一会话即可使用。上限：slug ≤ 41 字符、描述 ≤ 500 字符、正文 ≤ 32 KiB。
 - 随包提供 `review-changes`、`systematic-debugging`、`verify-before-done` skills。
 
 ## 常用命令
@@ -175,7 +188,7 @@ OMD_ENABLE_DEBUG=1 omd
 
 ### Proposal 与恢复生命周期
 
-能力激活、debug launch/attach 和源码修改统一使用 `prepare → inspect → approve → commit → verify`。Proposal 只存在于当前 session，不能自行授权；应用时始终进入上游 approval service。
+能力激活、debug launch/attach、技能保存和源码修改统一使用 `prepare → inspect → approve → commit → verify`。Proposal 只存在于当前 session，不能自行授权；应用时始终进入上游 approval service。
 
 语义重构只接受纯文本 `WorkspaceEdit`。资源创建/删除/改名、server 主动发起的 `workspace/applyEdit` 和 `workspace/executeCommand` 都会被拒绝。恢复日志保存在 `$DSH_HOME/omd/refactors/`，权限为 `0600`；成功应用或回滚后删除。它保证中断后可恢复，但不宣称跨文件系统的崩溃原子性。
 

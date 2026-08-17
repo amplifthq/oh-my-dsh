@@ -19,7 +19,7 @@
   English | <a href="README.zh.md">中文</a>
 </p>
 
-DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, and persistent code kernels.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, persistent code kernels, and approval-gated skill distillation that turns verified procedures into reusable skills.
 
 It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
@@ -95,6 +95,18 @@ Useful controls:
 - `proposal_control` shows the command or URL path, arguments with credential values redacted, working directory, and source config before applying with user approval.
 - Deactivation disposes the upstream MCP fiber and removes its tools.
 
+### Curated organ bank
+
+`plugin_control` extends the same proposal plane to the harness itself. It can list or inspect reviewed dsh plugins, then prepare a session-scoped load or unload. The package is not imported during discovery or proposal preparation. Only an approved `proposal_control apply` verifies the installed package against the exact version pin and reviewed `name`/`provide`/`inject` manifest, imports it, and mounts it through `agent.ctx.plugin()`. Unload calls `fiber.dispose()`, so Cordis reverses the plugin's registered effects in reverse order.
+
+This is the strongest grant OMD can make: an active plugin runs in-process with the harness's full environment, filesystem, and network privileges. The proposal states that explicitly. V1 therefore accepts only ids from the bundled [`presets/plugins.json`](presets/plugins.json) index; arbitrary npm names, paths, URLs, and runtime installation are not representable. `/omd-plugins` shows bank availability and session state.
+
+The deliberately small first bank contains one upstream organ:
+
+- `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.6` pin and is inert until an approved session load.
+
+Catalog admission and review requirements are documented in [Organ bank curation](docs/organ-bank-curation.md).
+
 ### Daily-use tools upstream does not prioritize
 
 - `@file` mentions: reference workspace files in your message as `@path`, `@path:12-40`, or `@"path with spaces"`. The mentioned content is attached to the same model step, bounded in size, and rendered as `hash_edit`-compatible anchors. Parsing is text-only (no composer autocomplete); files outside the workspace are never attached.
@@ -105,6 +117,7 @@ Useful controls:
 - `/usage` reports the live session; `omd usage` aggregates persisted sessions.
 - Opt-in DAP debugging: `debug_control` prepares launch and attach proposals for `debugpy`, `lldb-dap`, or custom stdio adapters; only an approved apply starts the adapter and debuggee.
 - Curated, opt-in MCP presets: `memory`, `context7`, and `playwright`.
+- Skill forge: `skill_control prepare_save` distills a procedure this session actually verified into a durable `SKILL.md`, and `/omd-distill [focus]` queues a drafting turn. The proposal carries the exact before/after file content plus secret-content warnings; only `proposal_control apply` with your approval writes it — atomically, containment-checked, and stale-guarded against concurrent edits. Scope `project` saves to `<workspace>/.dsh/skills/` for repository-specific procedures; scope `user` saves to `$DSH_HOME/skills/` for every project. The upstream skill watcher picks the file up live, so the skill is usable in the same session. Bounds: slug ≤ 41 chars, description ≤ 500 chars, body ≤ 32 KiB.
 - Bundled skills: `review-changes`, `systematic-debugging`, and `verify-before-done`.
 
 ## Commands
@@ -175,7 +188,7 @@ Edit either profile's `cordis.patch.yml` for profile-specific changes. `omd setu
 
 ### Proposal and recovery lifecycle
 
-Capability activation, debug launch/attach, and source mutation use the same `prepare → inspect → approve → commit → verify` lifecycle. A proposal is session-local and cannot authorize itself; applying it always reaches the upstream approval service.
+Capability activation, debug launch/attach, skill saves, and source mutation use the same `prepare → inspect → approve → commit → verify` lifecycle. A proposal is session-local and cannot authorize itself; applying it always reaches the upstream approval service.
 
 Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/delete/rename operations, server-driven `workspace/applyEdit`, and `workspace/executeCommand` are rejected. Recovery journals live under `$DSH_HOME/omd/refactors/` with mode `0600` and are deleted after successful apply or rollback. They make interrupted work recoverable, but do not claim filesystem-wide crash atomicity.
 

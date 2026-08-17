@@ -18,6 +18,9 @@ export type ProposalKind =
   | 'lsp-recovery'
   | 'debug-launch'
   | 'debug-attach'
+  | 'skill-write'
+  | 'plugin-load'
+  | 'plugin-unload'
 
 export interface ProposalEffect {
   type: string
