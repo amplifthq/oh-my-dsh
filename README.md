@@ -21,7 +21,7 @@
 
 DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, persistent code kernels, and approval-gated skill distillation that turns verified procedures into reusable skills.
 
-It is a Cordis bundle, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
+It is a native curated distribution, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
 > DeepSeek Harness is in developer preview. `oh-my-dsh` pins a tested upstream release instead of silently following breaking changes.
 

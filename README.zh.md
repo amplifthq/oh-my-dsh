@@ -21,7 +21,7 @@
 
 DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、默认开启的 SSRF 加固网页抓取、可选 DAP 调试、通知、usage 汇总、持久代码 kernel，以及经审批把验证过的流程蒸馏成可复用技能的 skill forge。
 
-它是 Cordis bundle，不是 fork。上游“一切皆插件”的架构保持不变，每项默认选择都可以覆盖。
+它是原生精选发行版，不是 fork。上游“一切皆插件”的架构保持不变，每项默认选择都可以覆盖。
 
 > DeepSeek Harness 仍处于 developer preview。`oh-my-dsh` 会锁定经过验证的上游版本，不会静默追随破坏性升级。
 
