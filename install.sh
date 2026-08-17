@@ -5,7 +5,7 @@ OMD_REPO="${OMD_REPO:-amplifthq/oh-my-dsh}"
 OMD_INSTALL_ROOT="${OMD_INSTALL_ROOT:-$HOME/.local/share/oh-my-dsh}"
 OMD_BIN_DIR="${OMD_BIN_DIR:-$HOME/.local/bin}"
 LOCK_HELD=0
-LOCK_FILE=''
+LOCK_DIR=''
 manifest_file=''
 
 die() {
@@ -275,48 +275,78 @@ read_install_state_field() {
 
 acquire_install_lock() {
   install_root="$1"
-  lock_path="${install_root}/update.lock"
-  LOCK_FILE="$lock_path"
+  lock_dir="${install_root}/update.lock"
+  LOCK_DIR="$lock_dir"
   mkdir -p "$install_root"
   attempts=0
+  lock_owner=''
   while [ "$attempts" -lt 3 ]; do
     attempts=$((attempts + 1))
     umask 077
-    if (
-      set -C
-      printf '{\n  "pid": %s,\n  "createdAt": "%s"\n}\n' \
-        "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$lock_path"
-    ) 2>/dev/null; then
+    if mkdir "$lock_dir" 2>/dev/null; then
+      if ! printf '%s\n' "$$" >"${lock_dir}/pid"; then
+        rmdir "$lock_dir" 2>/dev/null || true
+        die "could not record install lock owner: $lock_dir"
+      fi
       LOCK_HELD=1
       return 0
     fi
 
-    [ -e "$lock_path" ] || continue
-    lock_pid="$(json_number_field pid "$lock_path")"
-    case "$lock_pid" in
-      '' | *[!0-9]*) die "install lock is invalid and cannot be safely removed: $lock_path" ;;
-    esac
-    if kill -0 "$lock_pid" 2>/dev/null; then
-      die "install lock is held by another process (PID ${lock_pid})"
+    reclaim_dir="${lock_dir}/reclaim"
+    if mkdir "$reclaim_dir" 2>/dev/null; then
+      lock_pid=''
+      if [ -f "${lock_dir}/pid" ]; then
+        IFS= read -r lock_pid <"${lock_dir}/pid" || lock_pid=''
+      fi
+      case "$lock_pid" in
+        '' | *[!0-9]*)
+          rmdir "$reclaim_dir" 2>/dev/null || true
+          ;;
+        *)
+          if kill -0 "$lock_pid" 2>/dev/null; then
+            lock_owner="$lock_pid"
+            rmdir "$reclaim_dir" 2>/dev/null || true
+          else
+            if ! have_cmd ps; then
+              rmdir "$reclaim_dir" 2>/dev/null || true
+              die "cannot verify whether install lock PID ${lock_pid} is stale"
+            fi
+            if ps -p "$lock_pid" >/dev/null 2>&1; then
+              lock_owner="$lock_pid"
+              rmdir "$reclaim_dir" 2>/dev/null || true
+            else
+              stale_dir="${lock_dir}.stale.$$.$attempts"
+              if mv "$lock_dir" "$stale_dir" 2>/dev/null; then
+                rm -rf "$stale_dir"
+                continue
+              fi
+              rmdir "$reclaim_dir" 2>/dev/null || true
+            fi
+          fi
+          ;;
+      esac
     fi
-    if ! have_cmd ps; then
-      die "cannot verify whether install lock PID ${lock_pid} is stale"
+    if [ "$attempts" -lt 3 ]; then
+      sleep 1
     fi
-    if ps -p "$lock_pid" >/dev/null 2>&1; then
-      die "install lock is held by another process (PID ${lock_pid})"
-    fi
-    rm -f "$lock_path" || die "cannot remove stale install lock: $lock_path"
   done
-  die "could not acquire install lock: $lock_path"
+  if [ -n "$lock_owner" ]; then
+    die "install lock is held by another process (PID ${lock_owner})"
+  fi
+  die "could not acquire install lock: $lock_dir"
 }
 
 release_install_lock() {
-  if [ "$LOCK_HELD" != "1" ] || [ -z "$LOCK_FILE" ]; then
+  if [ "$LOCK_HELD" != "1" ] || [ -z "$LOCK_DIR" ]; then
     return 0
   fi
-  lock_pid="$(json_number_field pid "$LOCK_FILE")"
+  lock_pid=''
+  if [ -f "${LOCK_DIR}/pid" ]; then
+    IFS= read -r lock_pid <"${LOCK_DIR}/pid" || lock_pid=''
+  fi
   if [ "$lock_pid" = "$$" ]; then
-    rm -f "$LOCK_FILE"
+    rm -f "${LOCK_DIR}/pid"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
   fi
   LOCK_HELD=0
 }

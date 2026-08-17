@@ -15,7 +15,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { normalizePlatform } from '../bin/distribution-manifest.js'
 
@@ -33,6 +33,35 @@ function runInstall(env, options = {}) {
     cwd: repoRoot,
     ...options,
   })
+}
+
+function spawnInstall(env) {
+  const child = spawn('sh', [installSh], {
+    env: { ...process.env, ...env },
+    cwd: repoRoot,
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk
+  })
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk
+  })
+  const completion = new Promise((resolveCompletion) => {
+    child.on('close', (status, signal) => {
+      resolveCompletion({ status, signal, stdout, stderr })
+    })
+  })
+  return { child, completion }
+}
+
+async function waitForPath(path, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${path}`)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20))
+  }
 }
 
 function createMinimalPortableArchive(root, version, options = {}) {
@@ -216,18 +245,93 @@ test('install.sh rejects unsafe manifest versions, filenames, and digests before
   }
 })
 
-test('install.sh preserves a live lock owned by another process', () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-installer-lock-'))
+test('install.sh serializes concurrent stale-lock contenders without deleting the winner lock', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-installer-lock-race-'))
+  let contenderA
+  let contenderB
   try {
     const archive = createMinimalPortableArchive(root, '0.2.0-test')
     const manifestPath = writeManifest(root, archive)
     const installRoot = join(root, 'install')
-    mkdirSync(installRoot, { recursive: true })
-    const lockPath = join(installRoot, 'update.lock')
+    const lockDir = join(installRoot, 'update.lock')
+    mkdirSync(lockDir, { recursive: true })
+    writeFileSync(join(lockDir, 'pid'), '999999999\n')
+
+    const fakeBin = join(root, 'fake-bin')
+    const curlStarted = join(root, 'curl-started')
+    const curlRelease = join(root, 'curl-release')
+    mkdirSync(fakeBin, { recursive: true })
     writeFileSync(
-      lockPath,
-      JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
+      join(fakeBin, 'curl'),
+      `#!/bin/sh
+set -eu
+url=''
+destination=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    file://*) url="$1" ;;
+    -o) shift; destination="$1" ;;
+  esac
+  shift
+done
+: > "$OMD_TEST_CURL_STARTED"
+while [ ! -f "$OMD_TEST_CURL_RELEASE" ]; do sleep 1; done
+cp "\${url#file://}" "$destination"
+`,
     )
+    chmodSync(join(fakeBin, 'curl'), 0o755)
+
+    const env = {
+      OMD_INSTALL_ROOT: installRoot,
+      OMD_BIN_DIR: join(root, 'bin'),
+      OMD_MANIFEST_URL: `file://${manifestPath}`,
+      OMD_TEST_CURL_STARTED: curlStarted,
+      OMD_TEST_CURL_RELEASE: curlRelease,
+      PATH: `${fakeBin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+    }
+    contenderA = spawnInstall(env)
+    contenderB = spawnInstall(env)
+
+    await waitForPath(curlStarted)
+    const first = await Promise.race([
+      contenderA.completion.then((result) => ({ id: 'a', result })),
+      contenderB.completion.then((result) => ({ id: 'b', result })),
+    ])
+    assert.notEqual(first.result.status, 0, first.result.stderr || first.result.stdout)
+    assert.match(
+      first.result.stderr || first.result.stdout,
+      /install lock is held|could not acquire/,
+    )
+    assert.ok(lstatSync(lockDir).isDirectory())
+
+    const winner = first.id === 'a' ? contenderB : contenderA
+    assert.equal(Number(readFileSync(join(lockDir, 'pid'), 'utf8').trim()), winner.child.pid)
+    writeFileSync(curlRelease, '')
+    const winnerResult = await winner.completion
+    assert.equal(winnerResult.status, 0, winnerResult.stderr || winnerResult.stdout)
+    assert.equal(readlinkSync(join(installRoot, 'current')), 'versions/0.2.0-test')
+    assert.equal(existsSync(lockDir), false)
+  } finally {
+    writeFileSync(join(root, 'curl-release'), '')
+    for (const contender of [contenderA, contenderB]) {
+      if (contender?.child.exitCode === null) contender.child.kill()
+    }
+    await Promise.allSettled(
+      [contenderA, contenderB].filter(Boolean).map((contender) => contender.completion),
+    )
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('install.sh recovers a stale directory lock whose owner is dead', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-installer-stale-lock-'))
+  try {
+    const archive = createMinimalPortableArchive(root, '0.2.0-test')
+    const manifestPath = writeManifest(root, archive)
+    const installRoot = join(root, 'install')
+    const lockDir = join(installRoot, 'update.lock')
+    mkdirSync(lockDir, { recursive: true })
+    writeFileSync(join(lockDir, 'pid'), '999999999\n')
 
     const result = runInstall({
       OMD_INSTALL_ROOT: installRoot,
@@ -235,9 +339,9 @@ test('install.sh preserves a live lock owned by another process', () => {
       OMD_MANIFEST_URL: `file://${manifestPath}`,
       PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
     })
-    assert.notEqual(result.status, 0)
-    assert.match(result.stderr || result.stdout, /install lock is held by another process/)
-    assert.ok(existsSync(lockPath), 'a process that did not acquire the lock must not remove it')
+    assert.equal(result.status, 0, result.stderr || result.stdout)
+    assert.equal(readlinkSync(join(installRoot, 'current')), 'versions/0.2.0-test')
+    assert.equal(existsSync(lockDir), false)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
