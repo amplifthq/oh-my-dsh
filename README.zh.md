@@ -192,6 +192,14 @@ OMD_ENABLE_DEBUG=1 omd
 - 持久 kernel 以当前主机用户身份执行；它默认需要审批，不是安全沙箱。
 - dsh 没有 provider-neutral 定价接口，因此不会伪造金额。
 
+## 兼容性
+
+| oh-my-dsh | DeepSeek Harness（`@deepseek-ai/dsh*`） | Node.js                  |
+| --------- | --------------------------------------- | ------------------------ |
+| 0.1.x     | `0.1.0-rc.6`（精确锁定）                | `^22.19.0 \|\| >=24.0.0` |
+
+上游仍处于 developer preview，因此 `oh-my-dsh` 锁定一个经过验证的版本，绝不静默追随破坏性变更。[每周 canary 工作流](.github/workflows/canary.yml)会额外用 `dsh@next` 测试 overlay，上游即将发布的不兼容变更会先变成 issue，而不是先砸到用户。升级流程见 [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md)。
+
 ## 架构
 
 发布包是正式的 dsh bundle，组合顺序如下：

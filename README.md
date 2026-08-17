@@ -192,6 +192,14 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 - Persistent kernels execute as your host user. They require approval by default and are not a sandbox.
 - Monetary cost is not estimated because dsh does not expose provider-neutral pricing.
 
+## Compatibility
+
+| oh-my-dsh | DeepSeek Harness (`@deepseek-ai/dsh*`) | Node.js                  |
+| --------- | -------------------------------------- | ------------------------ |
+| 0.1.x     | `0.1.0-rc.6` (exact pin)               | `^22.19.0 \|\| >=24.0.0` |
+
+Upstream is in developer preview, so `oh-my-dsh` pins one tested release and never follows breaking changes silently. A [weekly canary workflow](.github/workflows/canary.yml) additionally tests the overlay against `dsh@next`, so an incompatible upcoming release is filed as an issue before it ships. Upgrades follow [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md).
+
 ## Architecture
 
 The published package is a formal dsh bundle. Its composition order is:
