@@ -1,0 +1,38 @@
+name: Feature / idea
+description: Propose a curated default, a host-side guard, a preset, or a capability.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `oh-my-dsh` is an overlay, not a fork — see [Why an overlay, not a fork](https://github.com/amplifthq/oh-my-dsh/blob/main/docs/why-an-overlay-not-a-fork.md).
+        Features that re-implement upstream Harness (TUI, plan/goal loops, provider routing, session engines) belong upstream, not here.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What daily task is worse without this?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer does it belong to?
+      options:
+        - A curated default or MCP/skill preset
+        - A host-side guard
+        - A capability upstream does not ship
+        - Probably upstream Harness itself
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

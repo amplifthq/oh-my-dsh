@@ -216,7 +216,7 @@ Bundle 位于 [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml)，独立插件�
 
 ## 开发
 
-贡献流程和分支规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+贡献流程和分支规则见 [CONTRIBUTING.md](CONTRIBUTING.md)，其中「Good first contributions」一节列出了门槛最低的入口（内置技能、curated MCP preset、对抗性测试）。改动该放在 overlay 还是上游，见[《为什么是 overlay 而不是 fork》](docs/why-an-overlay-not-a-fork.md)。
 
 ```sh
 git clone https://github.com/amplifthq/oh-my-dsh.git

@@ -216,7 +216,7 @@ The bundle lives in [`bundles/omd.cordis.yml`](bundles/omd.cordis.yml); individu
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for pull-request and branch rules.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for pull-request and branch rules, and its "Good first contributions" section for the easiest entry points (bundled skills, curated MCP presets, adversarial tests). [Why an overlay, not a fork](docs/why-an-overlay-not-a-fork.md) explains where a change belongs.
 
 ```sh
 git clone https://github.com/amplifthq/oh-my-dsh.git

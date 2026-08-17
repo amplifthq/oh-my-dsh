@@ -2,7 +2,16 @@
 
 English is the default for issues and pull requests. 中文也可以。
 
-`oh-my-dsh` is an overlay, not a fork. Changes belong here when they are a curated default, a host-side guard, or a capability upstream does not ship. Do not patch `@deepseek-ai/dsh*` in `node_modules`.
+`oh-my-dsh` is an overlay, not a fork. Changes belong here when they are a curated default, a host-side guard, or a capability upstream does not ship. Do not patch `@deepseek-ai/dsh*` in `node_modules`. The reasoning lives in [docs/why-an-overlay-not-a-fork.md](docs/why-an-overlay-not-a-fork.md).
+
+## Good first contributions
+
+The lowest-friction entry points, in rough order of effort:
+
+- **A bundled skill** — add a directory with a `SKILL.md` under [`presets/skills/`](presets/skills/) alongside `review-changes`, `systematic-debugging`, and `verify-before-done`. Good skills encode a repeatable engineering discipline, not a prompt persona.
+- **A curated MCP preset** — one entry in the catalog in [`bin/omd`](bin/omd) plus its inert definition in [`packages/discovery/src/index.ts`](packages/discovery/src/index.ts) (pin the package version), and a row in both READMEs. Presets must be widely useful and safe to expose through activation proposals.
+- **An adversarial test** — a bypass attempt against the guards described in [SECURITY.md](SECURITY.md) that the suite does not cover yet. A failing one is a security report (file it privately); a passing one is a welcome PR.
+- **Docs in your language** — `README.zh.md` tracks `README.md`; drift fixes are always accepted.
 
 ## Setup
 
