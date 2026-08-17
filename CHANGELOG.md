@@ -8,7 +8,7 @@ land in minor versions, never silently in patches).
 Upstream compatibility for each release is listed in the
 [README compatibility table](README.md#compatibility).
 
-## [0.1.5] - Unreleased
+## [0.1.5] - 2026-08-17
 
 ### Added
 

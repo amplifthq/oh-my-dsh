@@ -77,21 +77,19 @@ const server = createServer((_req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
   res.end(testHtml)
 })
-await new Promise((r) => server.listen(48125, '127.0.0.1', r))
-const testUrl = 'http://127.0.0.1:48125/'
+await new Promise((r) => server.listen(0, '127.0.0.1', r))
+const testPort = server.address().port
+const testUrl = `http://127.0.0.1:${testPort}/`
 console.log(`Local test server running at ${testUrl}`)
 
-// Kill any stale Chrome / harness daemons before starting
-try {
-  execSync('pkill -f "Google Chrome.*remote-debugging" 2>/dev/null')
-} catch {}
-try {
-  execSync('pkill -f "browser_harness.daemon" 2>/dev/null')
-} catch {}
-await new Promise((r) => setTimeout(r, 1000))
+// Dynamically select an available CDP port
+const cdpPortServer = createServer()
+await new Promise((r) => cdpPortServer.listen(0, '127.0.0.1', r))
+const cdpPort = cdpPortServer.address().port
+cdpPortServer.close()
+await new Promise((r) => setTimeout(r, 100))
 
 const tmpProfile = mkdtempSync(join(tmpdir(), 'omd-bu-smoke-'))
-const cdpPort = 9222
 
 console.log(`Launching isolated Chrome on port ${cdpPort} with profile ${tmpProfile}...`)
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
