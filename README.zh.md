@@ -122,7 +122,8 @@ omd trust add .
 - 默认关闭的 DAP 调试：`debug_control` 为 `debugpy`、`lldb-dap` 或自定义 stdio adapter 准备 launch/attach proposal；只有批准后的 apply 才会启动 adapter 和被调试进程。
 - 默认关闭的精选 MCP 预设：`memory`、`context7`、`playwright`。
 - Skill forge：`skill_control prepare_save` 把本次会话里真正执行并验证过的流程蒸馏成持久的 `SKILL.md`；`/omd-distill [焦点]` 会排入一个起草回合。Proposal 携带精确的写前/写后全文和疑似密钥告警；只有你批准 `proposal_control apply` 后才落盘——原子写入、路径包含性校验、并发修改守卫。scope `project` 写入 `<workspace>/.dsh/skills/`（仅本仓库），scope `user` 写入 `$DSH_HOME/skills/`（所有项目）。上游 skill watcher 实时感知新文件，同一会话即可使用。上限：slug ≤ 41 字符、描述 ≤ 500 字符、正文 ≤ 32 KiB。
-- 随包提供 `review-changes`、`systematic-debugging`、`verify-before-done` skills。
+- 随包提供 `review-changes`、`systematic-debugging`、`verify-before-done`、`browser-use-cli` skills。
+- 脚本式浏览器：随包的 `browser-use-cli` skill 让 Agent 通过普通 shell 工具把 Python 管道给经过审计的 `browser-use` CLI 来驱动真实浏览器，每次执行都走现有的命令审批。该 skill 默认使用一次性 profile 的隔离浏览器、强制关闭厂商遥测、禁止访问私网和云元数据地址；接管用户已登录的 Chrome 必须经过 Chrome 自身的授权弹窗。
 
 ## 常用命令
 

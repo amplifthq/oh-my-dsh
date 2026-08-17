@@ -122,7 +122,8 @@ Catalog admission and review requirements are documented in [Plugin catalog cura
 - Opt-in DAP debugging: `debug_control` prepares launch and attach proposals for `debugpy`, `lldb-dap`, or custom stdio adapters; only an approved apply starts the adapter and debuggee.
 - Curated, opt-in MCP presets: `memory`, `context7`, and `playwright`.
 - Skill forge: `skill_control prepare_save` distills a procedure this session actually verified into a durable `SKILL.md`, and `/omd-distill [focus]` queues a drafting turn. The proposal carries the exact before/after file content plus secret-content warnings; only `proposal_control apply` with your approval writes it — atomically, containment-checked, and stale-guarded against concurrent edits. Scope `project` saves to `<workspace>/.dsh/skills/` for repository-specific procedures; scope `user` saves to `$DSH_HOME/skills/` for every project. The upstream skill watcher picks the file up live, so the skill is usable in the same session. Bounds: slug ≤ 41 chars, description ≤ 500 chars, body ≤ 32 KiB.
-- Bundled skills: `review-changes`, `systematic-debugging`, and `verify-before-done`.
+- Bundled skills: `review-changes`, `systematic-debugging`, `verify-before-done`, and `browser-use-cli`.
+- Script-mode browsing via the bundled `browser-use-cli` skill: the agent drives a real browser by piping Python to the audited `browser-use` CLI through the ordinary shell tool, so every run rides the existing command approval. The skill defaults to an isolated throwaway-profile browser, requires vendor telemetry off, forbids private-network and metadata navigation, and gates the user's logged-in Chrome behind Chrome's own consent popup.
 
 ## Commands
 

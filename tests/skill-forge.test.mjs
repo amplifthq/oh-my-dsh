@@ -24,7 +24,12 @@ import {
 } from '../dist/packages/skill-forge/src/index.js'
 import { ProposalStore } from '../dist/packages/proposals/src/index.js'
 
-const PRESET_SKILLS = ['review-changes', 'systematic-debugging', 'verify-before-done']
+const PRESET_SKILLS = [
+  'review-changes',
+  'systematic-debugging',
+  'verify-before-done',
+  'browser-use-cli',
+]
 
 function presetContent(slug) {
   return readFileSync(new URL(`../presets/skills/${slug}/SKILL.md`, import.meta.url), 'utf8')

@@ -12,6 +12,16 @@ Upstream compatibility for each release is listed in the
 
 ### Added
 
+- Bundled `browser-use-cli` skill: script-mode browsing through the ordinary
+  shell tool. The agent pipes Python to the `browser-use` CLI (audited at
+  0.13.8 / browser-harness 0.1.9), so every browser action rides existing
+  command approval instead of adding a new tool surface. The skill defaults to
+  an isolated throwaway-profile browser, mandates `ANONYMIZED_TELEMETRY=false`
+  (which also disables default vendor cloud sync), forbids private-network and
+  cloud-metadata navigation, forbids automated MFA entry and vendor cloud
+  browsers, and permits attaching to the user's logged-in Chrome only through
+  Chrome's own per-session consent popup.
+
 - Skill forge: `skill_control prepare_save` distills a session-verified
   procedure into a durable `SKILL.md`, and `/omd-distill [focus]` queues a
   drafting turn. Saves flow through the proposal plane — the proposal carries
