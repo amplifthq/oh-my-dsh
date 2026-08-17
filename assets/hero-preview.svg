@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">oh-my-dsh</title>
+  <desc id="desc">A curated distribution of DeepSeek Harness. Overlay, not a fork.</desc>
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090b10"/>
+      <stop offset="50%" stop-color="#0d0f17"/>
+      <stop offset="100%" stop-color="#07080c"/>
+    </linearGradient>
+
+    <radialGradient id="ambient-glow" cx="50%" cy="38%" r="60%">
+      <stop offset="0%" stop-color="#c9a15a" stop-opacity="0.18"/>
+      <stop offset="35%" stop-color="#c9a15a" stop-opacity="0.06"/>
+      <stop offset="70%" stop-color="#0d0f17" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="top-flare" cx="50%" cy="0%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="gold-surface" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8cf9b"/>
+      <stop offset="45%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8d6e32"/>
+    </linearGradient>
+
+    <linearGradient id="gold-sheen" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#fff8e4" stop-opacity="0"/>
+      <stop offset="38%" stop-color="#fff8e4" stop-opacity="0"/>
+      <stop offset="47%" stop-color="#fffaf0" stop-opacity="0.55"/>
+      <stop offset="52%" stop-color="#ffe9b0" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#fff8e4" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="gold-edge-left" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#b68d44"/>
+      <stop offset="100%" stop-color="#6e511f"/>
+    </linearGradient>
+
+    <linearGradient id="gold-edge-right" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#dfbe7d"/>
+      <stop offset="100%" stop-color="#8a6727"/>
+    </linearGradient>
+
+    <linearGradient id="title-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#f5efe6"/>
+      <stop offset="100%" stop-color="#d6ccba"/>
+    </linearGradient>
+
+    <pattern id="dot-grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#ffffff" fill-opacity="0.04"/>
+    </pattern>
+
+    <linearGradient id="border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12"/>
+      <stop offset="40%" stop-color="#c9a15a" stop-opacity="0.25"/>
+      <stop offset="70%" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02"/>
+    </linearGradient>
+
+    <filter id="gold-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <clipPath id="iso-face">
+      <path d="M-80,0 L0,38 L80,0 L0,-38 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1280" height="520" rx="16" fill="url(#bg-grad)"/>
+  <rect width="1280" height="520" rx="16" fill="url(#dot-grid)"/>
+  <rect width="1280" height="520" rx="16" fill="url(#ambient-glow)"/>
+  <rect width="1280" height="520" rx="16" fill="url(#top-flare)"/>
+  <rect x="0.5" y="0.5" width="1279" height="519" rx="15.5" fill="none" stroke="url(#border-grad)" stroke-width="1"/>
+
+  <g transform="translate(640 108) scale(1.22)">
+    <!-- Base: DSH platform, lettered -->
+    <g transform="translate(0 40)" opacity="0.72">
+      <path d="M-80,0 L0,38 L80,0 L0,-38 Z" fill="#000000" opacity="0.4" transform="translate(0 14)"/>
+      <path d="M-80,0 L0,38 L0,48 L-80,10 Z" fill="#141720"/>
+      <path d="M0,38 L80,0 L80,10 L0,48 Z" fill="#1c202c"/>
+      <path d="M-80,0 L0,38 L80,0 L0,-38 Z" fill="#1a1e29" stroke="#2e3547" stroke-width="1"/>
+      <g clip-path="url(#iso-face)">
+        <text
+          x="0"
+          y="5"
+          text-anchor="middle"
+          fill="#5b657c"
+          font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+          font-size="22"
+          font-weight="700"
+          letter-spacing="6"
+          transform="scale(1 0.48)"
+        >dsh</text>
+      </g>
+    </g>
+
+    <!-- Mid: profile tray -->
+    <g transform="translate(0 18)" opacity="0.88">
+      <path d="M-80,0 L0,38 L0,48 L-80,10 Z" fill="#1d222f"/>
+      <path d="M0,38 L80,0 L80,10 L0,48 Z" fill="#282f40"/>
+      <path d="M-80,0 L0,38 L80,0 L0,-38 Z" fill="#232938" stroke="#3d4760" stroke-width="1"/>
+    </g>
+
+    <!-- Top: unmarked gold overlay + sheen -->
+    <g transform="translate(0 -16)">
+      <ellipse cx="0" cy="8" rx="84" ry="42" fill="#c9a15a" opacity="0.25" filter="url(#gold-glow)"/>
+      <path d="M-80,0 L0,38 L0,50 L-80,12 Z" fill="url(#gold-edge-left)"/>
+      <path d="M0,38 L80,0 L80,12 L0,50 Z" fill="url(#gold-edge-right)"/>
+      <path d="M-80,0 L0,38 L80,0 L0,-38 Z" fill="url(#gold-surface)" stroke="#fae3b4" stroke-width="1.2"/>
+      <path d="M-80,0 L0,38 L80,0 L0,-38 Z" fill="url(#gold-sheen)"/>
+      <path d="M-74,-1 L0,34 L74,-1" fill="none" stroke="#fff1d0" stroke-width="0.8" opacity="0.45"/>
+    </g>
+  </g>
+
+  <text x="640" y="286" text-anchor="middle" fill="url(#title-grad)" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="82" font-weight="700" letter-spacing="-2.5">oh-my-dsh</text>
+
+  <g transform="translate(640 348)">
+    <rect x="-150" y="-18" width="300" height="36" rx="18" fill="#141722" fill-opacity="0.9" stroke="#c9a15a" stroke-width="1" stroke-opacity="0.45"/>
+    <circle cx="-120" cy="0" r="6" fill="#c9a15a" fill-opacity="0.25"/>
+    <circle cx="-120" cy="0" r="3.5" fill="#e8cf9b"/>
+    <text x="-106" y="4.5" fill="#e5c88f" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" letter-spacing="3.2">OVERLAY, NOT A FORK</text>
+  </g>
+
+  <text x="640" y="424" text-anchor="middle" fill="#9ba1b0" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="400" letter-spacing="0.2">A curated distribution of DeepSeek Harness</text>
+</svg>

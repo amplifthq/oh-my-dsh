@@ -29,6 +29,12 @@ Do not bump the package version in a feature PR. Releases are a separate step.
 
 Upstream `@deepseek-ai/dsh*` packages are pinned to the same release. Bump them together, never one at a time.
 
+## Releases
+
+1. Move the release's changes into a dated version section in `CHANGELOG.md`.
+2. Bump the version in `package.json` and `src/index.ts` — they must match; the release workflow verifies both against the tag.
+3. Commit, tag `vX.Y.Z`, and push the tag. The Release workflow re-runs every check and publishes to npm with provenance. It requires the `NPM_TOKEN` repository secret (a granular npm automation token).
+
 ## Branch rules
 
 `main` rejects force-pushes and deletion. Collaborators merge through pull requests. Repository admins may push directly for small, already-verified fixes.

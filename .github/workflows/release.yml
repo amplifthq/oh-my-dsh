@@ -1,0 +1,52 @@
+name: Release
+
+# Publishes to npm with provenance when a `v*` tag is pushed.
+# Requires the NPM_TOKEN repository secret (npm granular automation token
+# with publish access to the oh-my-dsh package).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Verify tag and version exports match
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest="$(node -p "require('./package.json').version")"
+          exported="$(node -e "import('./dist/src/index.js').then((m) => console.log(m.version))")"
+          test "$tag" = "$manifest" || { echo "tag v$tag does not match package.json $manifest" >&2; exit 1; }
+          test "$exported" = "$manifest" || { echo "src/index.ts exports $exported but package.json says $manifest" >&2; exit 1; }
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
