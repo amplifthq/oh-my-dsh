@@ -46,8 +46,7 @@
     "presets",
     "README.md",
     "README.zh.md",
-    "LICENSE",
-    "install.sh"
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {
@@ -95,6 +94,7 @@
     "@deepseek-ai/dsh-web-search-perplexity": "0.1.0-rc.6",
     "@deepseek-ai/dsh-workspace": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "dsh-pkg-info": "0.1.1",
     "es-module-lexer": "^2.3.2",
     "js-yaml": "^4.2.0",
     "pyright": "^1.1.412",
