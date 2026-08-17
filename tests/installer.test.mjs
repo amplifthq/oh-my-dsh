@@ -10,6 +10,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,7 +35,7 @@ function runInstall(env, options = {}) {
   })
 }
 
-function createMinimalPortableArchive(root, version) {
+function createMinimalPortableArchive(root, version, options = {}) {
   const platform = normalizePlatform()
   const versionDirName = `oh-my-dsh-v${version}`
   const stagingRoot = join(root, 'archive-staging')
@@ -75,10 +76,13 @@ exec "$SCRIPT_DIR/runtime/bin/node" "$SCRIPT_DIR/app/bin/omd" "$@"
       schemaVersion: 1,
       omdVersion: version,
       platform,
-      nodeVersion: '22.19.0',
-      dshVersion: '0.1.0-rc.6',
+      nodeVersion: options.nodeVersion || '22.19.0',
+      dshVersion: options.dshVersion || '0.1.0-rc.6',
     })}\n`,
   )
+  if (options.escapingSymlink) {
+    symlinkSync('../../../../outside', join(versionDir, 'app', 'escape'))
+  }
 
   const archiveName = `${versionDirName}-${platform}.tar.gz`
   const archivePath = join(root, archiveName)
@@ -96,22 +100,22 @@ exec "$SCRIPT_DIR/runtime/bin/node" "$SCRIPT_DIR/app/bin/omd" "$@"
   }
 }
 
-function writeManifest(root, archive) {
+function writeManifest(root, archive, overrides = {}) {
   const manifestPath = join(root, 'release-manifest.json')
   const manifest = {
     schemaVersion: 1,
-    omdVersion: archive.version,
+    omdVersion: overrides.omdVersion || archive.version,
     releasedAt: '2026-08-17T00:00:00Z',
     tag: `v${archive.version}`,
     channel: 'stable',
     artifacts: {
       [archive.platform]: {
-        filename: archive.archiveName,
-        sha256: archive.sha256,
+        filename: overrides.filename || archive.archiveName,
+        sha256: overrides.sha256 || archive.sha256,
         size: readFileSync(archive.archivePath).length,
         platform: archive.platform,
-        nodeVersion: '22.19.0',
-        dshVersion: '0.1.0-rc.6',
+        nodeVersion: overrides.nodeVersion || '22.19.0',
+        dshVersion: overrides.dshVersion || '0.1.0-rc.6',
         url: `file://${archive.archivePath}`,
       },
     },
@@ -179,6 +183,103 @@ esac
     )
     assert.equal(version.status, 0, version.stderr)
     assert.equal(version.stdout.trim(), '0.2.0-test')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('install.sh rejects unsafe manifest versions, filenames, and digests before installation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-installer-sanitize-'))
+  try {
+    const archive = createMinimalPortableArchive(root, '0.2.0-test')
+    const cases = [
+      { overrides: { omdVersion: '../escape' }, message: /invalid.*omdVersion/i },
+      { overrides: { filename: '../escape.tar.gz' }, message: /invalid.*filename/i },
+      { overrides: { sha256: 'g'.repeat(64) }, message: /invalid.*sha256/i },
+    ]
+
+    for (const [index, { overrides, message }] of cases.entries()) {
+      const manifestPath = writeManifest(root, archive, overrides)
+      const installRoot = join(root, `install-${index}`)
+      const result = runInstall({
+        OMD_INSTALL_ROOT: installRoot,
+        OMD_BIN_DIR: join(root, `bin-${index}`),
+        OMD_MANIFEST_URL: `file://${manifestPath}`,
+        PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+      })
+      assert.notEqual(result.status, 0)
+      assert.match(result.stderr || result.stdout, message)
+      assert.equal(existsSync(join(installRoot, 'versions')), false)
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('install.sh preserves a live lock owned by another process', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-installer-lock-'))
+  try {
+    const archive = createMinimalPortableArchive(root, '0.2.0-test')
+    const manifestPath = writeManifest(root, archive)
+    const installRoot = join(root, 'install')
+    mkdirSync(installRoot, { recursive: true })
+    const lockPath = join(installRoot, 'update.lock')
+    writeFileSync(
+      lockPath,
+      JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
+    )
+
+    const result = runInstall({
+      OMD_INSTALL_ROOT: installRoot,
+      OMD_BIN_DIR: join(root, 'bin'),
+      OMD_MANIFEST_URL: `file://${manifestPath}`,
+      PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+    })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr || result.stdout, /install lock is held by another process/)
+    assert.ok(existsSync(lockPath), 'a process that did not acquire the lock must not remove it')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('install.sh rejects archive symlinks that escape the extracted tree', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-installer-symlink-'))
+  try {
+    const archive = createMinimalPortableArchive(root, '0.2.0-test', {
+      escapingSymlink: true,
+    })
+    const manifestPath = writeManifest(root, archive)
+    const result = runInstall({
+      OMD_INSTALL_ROOT: join(root, 'install'),
+      OMD_BIN_DIR: join(root, 'bin'),
+      OMD_MANIFEST_URL: `file://${manifestPath}`,
+      PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+    })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr || result.stdout, /unsafe archive symlink/i)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('install.sh binds extracted distribution identity to the manifest artifact', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-installer-identity-'))
+  try {
+    const archive = createMinimalPortableArchive(root, '0.2.0-test', {
+      nodeVersion: '24.0.0',
+    })
+    const manifestPath = writeManifest(root, archive)
+    const installRoot = join(root, 'install')
+    const result = runInstall({
+      OMD_INSTALL_ROOT: installRoot,
+      OMD_BIN_DIR: join(root, 'bin'),
+      OMD_MANIFEST_URL: `file://${manifestPath}`,
+      PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+    })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr || result.stdout, /distribution identity.*nodeVersion/i)
+    assert.equal(existsSync(join(installRoot, 'current')), false)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

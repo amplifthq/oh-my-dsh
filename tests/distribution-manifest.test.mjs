@@ -6,16 +6,8 @@ import {
   parseReleaseManifest,
 } from '../bin/distribution-manifest.js'
 
-test('normalizePlatform maps supported os/arch to platform tuples', () => {
-  assert.equal(normalizePlatform('darwin', 'arm64'), 'darwin-arm64')
-  assert.equal(normalizePlatform('linux', 'x64'), 'linux-x64')
-  assert.throws(() => normalizePlatform('darwin', 'x64'), /unsupported platform: darwin-x64/)
-  assert.throws(() => normalizePlatform('win32', 'x64'), /unsupported platform: win32-x64/)
-  assert.throws(() => normalizePlatform('linux', 'arm64'), /unsupported platform: linux-arm64/)
-})
-
-test('parseReleaseManifest and findArtifactForPlatform validate external manifest structure', () => {
-  const manifestRaw = {
+function validManifest() {
+  return {
     schemaVersion: 1,
     omdVersion: '0.2.0',
     releasedAt: '2026-08-17T00:00:00Z',
@@ -42,8 +34,18 @@ test('parseReleaseManifest and findArtifactForPlatform validate external manifes
       },
     },
   }
+}
 
-  const manifest = parseReleaseManifest(manifestRaw)
+test('normalizePlatform maps supported os/arch to platform tuples', () => {
+  assert.equal(normalizePlatform('darwin', 'arm64'), 'darwin-arm64')
+  assert.equal(normalizePlatform('linux', 'x64'), 'linux-x64')
+  assert.throws(() => normalizePlatform('darwin', 'x64'), /unsupported platform: darwin-x64/)
+  assert.throws(() => normalizePlatform('win32', 'x64'), /unsupported platform: win32-x64/)
+  assert.throws(() => normalizePlatform('linux', 'arm64'), /unsupported platform: linux-arm64/)
+})
+
+test('parseReleaseManifest and findArtifactForPlatform validate external manifest structure', () => {
+  const manifest = parseReleaseManifest(validManifest())
   assert.equal(manifest.omdVersion, '0.2.0')
   assert.equal(manifest.channel, 'stable')
 
@@ -55,4 +57,31 @@ test('parseReleaseManifest and findArtifactForPlatform validate external manifes
     () => findArtifactForPlatform(manifest, 'linux-arm64'),
     /no artifact available for platform linux-arm64/,
   )
+})
+
+test('parseReleaseManifest rejects unsafe versions, filenames, and digests', () => {
+  for (const omdVersion of ['../0.2.0', '0.2', '0.2.0+build']) {
+    assert.throws(
+      () => parseReleaseManifest({ ...validManifest(), omdVersion }),
+      /invalid release manifest omdVersion/,
+    )
+  }
+
+  for (const filename of [
+    '../oh-my-dsh.tar.gz',
+    'nested/oh-my-dsh.tar.gz',
+    String.raw`nested\oh-my-dsh.tar.gz`,
+    'oh-my-dsh..tar.gz',
+    'oh-my-dsh.zip',
+  ]) {
+    const manifest = validManifest()
+    manifest.artifacts['darwin-arm64'].filename = filename
+    assert.throws(() => parseReleaseManifest(manifest), /invalid artifact filename/)
+  }
+
+  for (const sha256 of ['0'.repeat(63), 'g'.repeat(64), `${'0'.repeat(63)}/`]) {
+    const manifest = validManifest()
+    manifest.artifacts['darwin-arm64'].sha256 = sha256
+    assert.throws(() => parseReleaseManifest(manifest), /invalid artifact sha256/)
+  }
 })

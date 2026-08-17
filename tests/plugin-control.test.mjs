@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
+import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 
 import {
   organView,
@@ -41,6 +43,16 @@ function entry(overrides = {}) {
   }
 }
 
+function communityProvenance(overrides = {}) {
+  return {
+    repository: 'https://github.com/example/safe-organ',
+    publisher: 'example-publisher',
+    integrity: `sha512-${'a'.repeat(86)}==`,
+    commit: 'a'.repeat(40),
+    ...overrides,
+  }
+}
+
 async function fakePackage(version = '1.2.3-rc.4') {
   const directory = await mkdtemp(join(tmpdir(), 'omd-organ-package-'))
   const packageJsonPath = join(directory, 'package.json')
@@ -51,6 +63,8 @@ async function fakePackage(version = '1.2.3-rc.4') {
 test('parseOrganIndex accepts a curated exact-pinned entry', () => {
   assert.deepEqual(parseOrganIndex(JSON.stringify([entry()])), [entry()])
   assert.deepEqual(parseOrganIndex([entry()]), [entry()])
+  const community = entry({ source: 'community', provenance: communityProvenance() })
+  assert.deepEqual(parseOrganIndex([community]), [community])
 })
 
 test('parseOrganIndex rejects malformed and unsafe entries', () => {
@@ -69,7 +83,20 @@ test('parseOrganIndex rejects malformed and unsafe entries', () => {
     [[entry({ manifest: { inject: [] } })], /provide/i],
     [[entry({ manifest: { provide: [] } })], /inject/i],
     [[entry({ manifest: { provide: 'fixture', inject: [] } })], /provide/i],
-    [[entry({ source: 'community' })], /source/i],
+    [[entry({ source: 'third-party' })], /source/i],
+    [[entry({ source: 'community' })], /provenance/i],
+    [
+      [entry({ source: 'community', provenance: communityProvenance({ repository: 'http://x' }) })],
+      /HTTPS/i,
+    ],
+    [
+      [entry({ source: 'community', provenance: communityProvenance({ integrity: 'sha256-x' }) })],
+      /sha512/i,
+    ],
+    [
+      [entry({ source: 'community', provenance: communityProvenance({ commit: 'ABC' }) })],
+      /commit/i,
+    ],
   ]
   for (const [value, expected] of cases) {
     assert.throws(() => parseOrganIndex(value), expected, JSON.stringify(value))
@@ -371,9 +398,13 @@ test('registered agent-context cleanup disposes owned organs', async () => {
 // --- proposal planning and commit ---
 
 test('planOrganLoad exposes the exact pin, manifest, config, risk, and privilege grant', () => {
-  const planned = planOrganLoad(fixtureEntry({ config: { fail: false, level: 1 } }), {
-    level: 2,
-  })
+  const provenance = communityProvenance()
+  const planned = planOrganLoad(
+    fixtureEntry({ config: { fail: false, level: 1 }, source: 'community', provenance }),
+    {
+      level: 2,
+    },
+  )
   assert.deepEqual(planned.config, { fail: false, level: 2 })
   assert.equal(planned.effects.length, 1)
   const effect = planned.effects[0]
@@ -385,6 +416,7 @@ test('planOrganLoad exposes the exact pin, manifest, config, risk, and privilege
   assert.deepEqual(effect.details.manifest, fixtureEntry().manifest)
   assert.deepEqual(effect.details.config, planned.config)
   assert.equal(effect.details.risk, fixtureEntry().risk)
+  assert.deepEqual(effect.details.provenance, provenance)
   assert.equal(effect.details.privilege, IN_PROCESS_PRIVILEGE_WARNING)
   assert.match(effect.summary, /full privileges/i)
 })
@@ -496,7 +528,7 @@ test('a failed plugin-load commit stays failed and mounts nothing', async () => 
   await ctx.root.fiber.dispose()
 })
 
-test('the bundled bank loads its exact-pinned real organ only on proposal apply', async () => {
+test('the bundled catalog loads every exact-pinned plugin only on proposal apply', async () => {
   const entries = readBundledOrganIndex()
   assert.deepEqual(
     entries.map(({ id, module, version }) => ({ id, module, version })),
@@ -506,10 +538,17 @@ test('the bundled bank loads its exact-pinned real organ only on proposal apply'
         module: '@deepseek-ai/dsh-skill-badge',
         version: '0.1.0-rc.6',
       },
+      {
+        id: 'dsh-pkg-info',
+        module: 'dsh-pkg-info',
+        version: '0.1.1',
+      },
     ],
   )
   const ctx = new Context()
   ctx.provide('skills', { registerProvider() {} })
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime)
   const owner = {}
   const store = new ProposalStore()
   let imports = 0
@@ -519,23 +558,33 @@ test('the bundled bank loads its exact-pinned real organ only on proposal apply'
       return import(specifier)
     },
   })
-  const planned = planOrganLoad(entries[0], {})
-  const proposal = store.create(owner, {
-    kind: 'plugin-load',
-    title: planned.title,
-    summary: planned.summary,
-    effects: planned.effects,
-    commit: organLoadCommit(planned, controller, owner, ctx),
-  })
 
-  assert.equal(imports, 0)
-  const result = await store.apply(owner, proposal.id, {})
-  assert.equal(imports, 1)
-  assert.match(result.summary, /ACTIVE/)
-  const active = controller.list(owner)[0]
-  assert.equal(active.id, 'dsh-skill-badge')
+  for (const catalogEntry of entries) {
+    const planned = planOrganLoad(catalogEntry, {})
+    const proposal = store.create(owner, {
+      kind: 'plugin-load',
+      title: planned.title,
+      summary: planned.summary,
+      effects: planned.effects,
+      commit: organLoadCommit(planned, controller, owner, ctx),
+    })
 
-  await controller.unload(owner, active.id, active.instanceId)
-  assert.deepEqual(controller.list(owner), [])
+    const importsBeforeApply = imports
+    assert.equal(controller.list(owner).length, 0)
+    const result = await store.apply(owner, proposal.id, {})
+    assert.equal(imports, importsBeforeApply + 1)
+    assert.match(result.summary, /ACTIVE/)
+    const active = controller.list(owner)[0]
+    assert.equal(active.id, catalogEntry.id)
+
+    if (catalogEntry.id === 'dsh-pkg-info') {
+      assert.ok(ctx.tools.schemas().some((schema) => schema.name === 'pkg_info'))
+    }
+    await controller.unload(owner, active.id, active.instanceId)
+    assert.deepEqual(controller.list(owner), [])
+    if (catalogEntry.id === 'dsh-pkg-info') {
+      assert.ok(ctx.tools.schemas().every((schema) => schema.name !== 'pkg_info'))
+    }
+  }
   await ctx.root.fiber.dispose()
 })

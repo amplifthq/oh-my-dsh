@@ -91,6 +91,7 @@ export function planOrganLoad(
           module: entry.module,
           version: entry.version,
           source: entry.source,
+          provenance: entry.provenance ?? null,
           summary: entry.summary,
           risk: entry.risk,
           manifest: entry.manifest,

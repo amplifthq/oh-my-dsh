@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -126,6 +127,37 @@ test('reconcileTransactions cleans interrupted transactions based on actual syml
     assert.equal(rec1.activeVersion, '0.1.7')
     const clearedState = readInstallState(root)
     assert.equal(clearedState.openTransaction, null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('reconcileTransactions removes a stale previous symlink when no previous version remains', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-state-stale-previous-'))
+  try {
+    mkdirSync(join(root, 'versions', '0.2.0'), { recursive: true })
+    symlinkSync('versions/0.2.0', join(root, 'current'))
+    symlinkSync('versions/missing', join(root, 'previous'))
+    writeInstallState(root, {
+      schemaVersion: 1,
+      currentVersion: '0.2.0',
+      previousVersion: null,
+      installedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      openTransaction: {
+        op: 'update',
+        candidateVersion: '0.2.0',
+        oldCurrent: null,
+        oldPrevious: null,
+        startedAt: new Date().toISOString(),
+      },
+      verifiedArtifacts: {},
+    })
+
+    const result = reconcileTransactions(root)
+    assert.equal(result.recovered, true)
+    assert.equal(existsSync(join(root, 'previous')), false)
+    assert.throws(() => lstatSync(join(root, 'previous')), /ENOENT/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

@@ -131,8 +131,18 @@ export function reconcileTransactions(installRoot) {
     // Current switch never completed
     resolvedCurrent = tx.oldCurrent
     resolvedPrevious = tx.oldPrevious
-    if (resolvedPrevious) {
-      atomicSymlink(installRoot, `versions/${resolvedPrevious}`, 'previous')
+  }
+
+  const resolvedPreviousDir = resolvedPrevious
+    ? join(installRoot, 'versions', resolvedPrevious)
+    : null
+  if (resolvedPrevious && resolvedPreviousDir && existsSync(resolvedPreviousDir)) {
+    atomicSymlink(installRoot, `versions/${resolvedPrevious}`, 'previous')
+  } else {
+    try {
+      unlinkSync(join(installRoot, 'previous'))
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
     }
   }
 

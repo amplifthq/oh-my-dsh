@@ -6,7 +6,6 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   readlinkSync,
@@ -16,18 +15,23 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { zstdDecompressSync } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
-import { detectDistributionMode, formatDistributionIdentity } from './distribution-identity.js'
+import {
+  detectDistributionMode,
+  formatDistributionIdentity,
+  parseDistributionInfo,
+} from './distribution-identity.js'
 import { verifyFileManifest } from './distribution-files.js'
 import {
   findArtifactForPlatform,
   normalizePlatform,
+  OMD_VERSION_PATTERN,
   parseReleaseManifest,
 } from './distribution-manifest.js'
 import {
@@ -50,7 +54,11 @@ const RELEASE_MANIFEST_URL =
   'https://github.com/amplifthq/oh-my-dsh/releases/latest/download/release-manifest.json'
 
 function distributionContext() {
-  return detectDistributionMode(packageRoot)
+  const mode = detectDistributionMode(packageRoot)
+  if (mode.mode === 'corrupt-portable') {
+    fail(`portable distribution metadata is corrupt: ${mode.error}`)
+  }
+  return mode
 }
 const presetCatalog = {
   memory: 'Local persistent knowledge graph via MCP Reference Memory',
@@ -376,6 +384,7 @@ async function doctor(args = []) {
     const manifestPath = join(mode.distributionRoot, 'distribution-files.json')
     if (!existsSync(manifestPath)) {
       console.log('file manifest: missing distribution-files.json')
+      process.exitCode = 1
       return
     }
     let fileManifest
@@ -383,6 +392,7 @@ async function doctor(args = []) {
       fileManifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
     } catch (error) {
       console.log(`file manifest: cannot parse distribution-files.json (${error.message})`)
+      process.exitCode = 1
       return
     }
     const result = await verifyFileManifest(mode.distributionRoot, fileManifest)
@@ -394,6 +404,7 @@ async function doctor(args = []) {
     if (result.missing.length) console.log(`  missing: ${result.missing.join(', ')}`)
     if (result.mismatches.length) console.log(`  mismatches: ${result.mismatches.join(', ')}`)
     if (result.extra.length) console.log(`  extra: ${result.extra.join(', ')}`)
+    process.exitCode = 1
   }
 }
 
@@ -407,9 +418,17 @@ function rollback() {
   const installRoot = resolveInstallRoot(mode)
   if (!installRoot) fail('cannot determine portable install root (set OMD_INSTALL_ROOT)')
 
-  reconcileTransactions(installRoot)
   const lock = acquireInstallLock(installRoot)
   try {
+    reconcileTransactions(installRoot)
+    const state = readInstallState(installRoot)
+    if (!state.previousVersion) {
+      throw new Error('no rollback target available: no previous version is recorded')
+    }
+    validateInstalledDistributionIdentity(installRoot, state.previousVersion, {
+      omdVersion: state.previousVersion,
+      platform: mode.distributionInfo.platform,
+    })
     const result = rollbackToPreviousVersion(installRoot)
     console.log(`omd: rolled back from ${result.from} to ${result.to}`)
     console.log('omd: run `omd rollback` again to reverse this rollback when needed.')
@@ -430,7 +449,7 @@ async function fetchReleaseManifest() {
   }
   const response = await fetch(RELEASE_MANIFEST_URL)
   if (!response.ok) {
-    fail(`failed to fetch release manifest (${response.status} ${response.statusText})`)
+    throw new Error(`failed to fetch release manifest (${response.status} ${response.statusText})`)
   }
   return parseReleaseManifest(await response.text())
 }
@@ -438,36 +457,78 @@ async function fetchReleaseManifest() {
 async function downloadToFile(url, destination) {
   const response = await fetch(url)
   if (!response.ok) {
-    fail(`failed to download artifact (${response.status} ${response.statusText})`)
+    throw new Error(`failed to download artifact (${response.status} ${response.statusText})`)
   }
-  if (!response.body) fail('download response has no body')
+  if (!response.body) throw new Error('download response has no body')
   mkdirSync(dirname(destination), { recursive: true })
   await pipeline(response.body, createWriteStream(destination))
 }
 
-function validateArchiveEntries(entries) {
+function pathEscapesArchive(path) {
+  const normalized = path.replace(/\\/g, '/')
+  if (normalized.startsWith('/')) return true
+  let depth = 0
+  for (const part of normalized.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (depth === 0) return true
+      depth -= 1
+    } else {
+      depth += 1
+    }
+  }
+  return false
+}
+
+function validateArchiveEntries(entries, verboseEntries) {
+  if (entries.length !== verboseEntries.length) {
+    throw new Error('cannot correlate archive entries with link metadata')
+  }
   for (const entry of entries) {
     if (!entry || entry === './') continue
-    if (entry.startsWith('/') || entry.startsWith('../') || entry.includes('/../')) {
-      fail(`unsafe archive entry: ${entry}`)
+    if (pathEscapesArchive(entry)) {
+      throw new Error(`unsafe archive entry: ${entry}`)
+    }
+  }
+
+  for (let index = 0; index < verboseEntries.length; index += 1) {
+    const listing = verboseEntries[index]
+    if (!listing.startsWith('l')) continue
+    const separator = listing.lastIndexOf(' -> ')
+    if (separator < 0 || !entries[index]) {
+      throw new Error(`cannot inspect archive symlink: ${listing}`)
+    }
+    const target = listing.slice(separator + 4)
+    const entry = entries[index].replace(/\\/g, '/')
+    const targetPath = `${dirname(entry)}/${target}`
+    if (target.startsWith('/') || target.startsWith('\\') || pathEscapesArchive(targetPath)) {
+      throw new Error(`unsafe archive symlink: ${entry} -> ${target}`)
     }
   }
 }
 
 function listTarEntries(archivePath) {
-  const result = spawnSync('tar', ['-tzf', archivePath], { encoding: 'utf8' })
-  if (result.status !== 0) {
-    fail(`cannot inspect archive: ${result.stderr || result.stdout}`)
+  const names = spawnSync('tar', ['-tzf', archivePath], { encoding: 'utf8' })
+  if (names.status !== 0) {
+    throw new Error(`cannot inspect archive: ${names.stderr || names.stdout}`)
   }
-  return result.stdout.split('\n').filter(Boolean)
+  const verbose = spawnSync('tar', ['-tvzf', archivePath], { encoding: 'utf8' })
+  if (verbose.status !== 0) {
+    throw new Error(`cannot inspect archive links: ${verbose.stderr || verbose.stdout}`)
+  }
+  return {
+    entries: names.stdout.split('\n').filter(Boolean),
+    verboseEntries: verbose.stdout.split('\n').filter(Boolean),
+  }
 }
 
 function extractTarArchive(archivePath, destination) {
-  validateArchiveEntries(listTarEntries(archivePath))
+  const { entries, verboseEntries } = listTarEntries(archivePath)
+  validateArchiveEntries(entries, verboseEntries)
   mkdirSync(destination, { recursive: true })
   const result = spawnSync('tar', ['-xzf', archivePath, '-C', destination], { encoding: 'utf8' })
   if (result.status !== 0) {
-    fail(`archive extraction failed: ${result.stderr || result.stdout}`)
+    throw new Error(`archive extraction failed: ${result.stderr || result.stdout}`)
   }
 }
 
@@ -478,15 +539,17 @@ function findExtractedVersionDir(stagingDir) {
     const candidate = join(stagingDir, entries[0])
     if (existsSync(join(candidate, 'distribution.json'))) return candidate
   }
-  fail('cannot locate extracted portable version directory')
+  throw new Error('cannot locate extracted portable version directory')
 }
 
 function runPortableHealthCheck(versionDir) {
   const nodeBin = join(versionDir, 'runtime', 'bin', 'node')
   const omdBin = join(versionDir, 'app', 'bin', 'omd')
-  if (!existsSync(omdBin)) fail(`health check failed: missing ${omdBin}`)
-  const command = existsSync(nodeBin) ? nodeBin : process.execPath
-  const result = spawnSync(command, [omdBin, '--version'], {
+  if (!existsSync(nodeBin) || !statSync(nodeBin).isFile()) {
+    throw new Error(`health check failed: missing embedded runtime ${nodeBin}`)
+  }
+  if (!existsSync(omdBin)) throw new Error(`health check failed: missing ${omdBin}`)
+  const result = spawnSync(nodeBin, [omdBin, '--version'], {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -495,9 +558,34 @@ function runPortableHealthCheck(versionDir) {
     },
   })
   if (result.status !== 0) {
-    fail(`health check failed: ${result.stderr || result.stdout || 'non-zero exit'}`)
+    throw new Error(`health check failed: ${result.stderr || result.stdout || 'non-zero exit'}`)
   }
   return String(result.stdout || '').trim()
+}
+
+function validateDistributionIdentity(versionDir, expected) {
+  const identityPath = join(versionDir, 'distribution.json')
+  let identity
+  try {
+    identity = parseDistributionInfo(readFileSync(identityPath, 'utf8'))
+  } catch (error) {
+    throw new Error(`invalid distribution identity at ${identityPath}: ${error.message}`)
+  }
+  for (const field of ['omdVersion', 'platform', 'nodeVersion', 'dshVersion']) {
+    if (expected[field] !== undefined && identity[field] !== expected[field]) {
+      throw new Error(
+        `distribution identity ${field} does not match manifest (expected ${expected[field]}, got ${identity[field]})`,
+      )
+    }
+  }
+  return identity
+}
+
+function validateInstalledDistributionIdentity(installRoot, version, expected) {
+  if (!OMD_VERSION_PATTERN.test(version)) {
+    throw new Error(`invalid installed version: ${version}`)
+  }
+  return validateDistributionIdentity(join(installRoot, 'versions', version), expected)
 }
 
 async function update() {
@@ -511,11 +599,11 @@ async function update() {
   const installRoot = resolveInstallRoot(mode)
   if (!installRoot) fail('cannot determine portable install root (set OMD_INSTALL_ROOT)')
 
-  reconcileTransactions(installRoot)
   const lock = acquireInstallLock(installRoot)
   let stagingDir = null
 
   try {
+    reconcileTransactions(installRoot)
     const releaseManifest = await fetchReleaseManifest()
     const platform = normalizePlatform()
     const artifact = findArtifactForPlatform(releaseManifest, platform)
@@ -529,24 +617,31 @@ async function update() {
       return
     }
 
-    stagingDir = mkdtempSync(join(tmpdir(), 'omd-update-staging-'))
+    stagingDir = join(installRoot, `.staging-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    mkdirSync(stagingDir, { mode: 0o700 })
     const archivePath = join(stagingDir, artifact.filename)
     await downloadToFile(artifact.url, archivePath)
 
     const digest = sha256File(archivePath)
     if (digest !== artifact.sha256) {
-      fail(`artifact checksum mismatch (expected ${artifact.sha256}, got ${digest})`)
+      throw new Error(`artifact checksum mismatch (expected ${artifact.sha256}, got ${digest})`)
     }
 
     const extractDir = join(stagingDir, 'extract')
     extractTarArchive(archivePath, extractDir)
     const versionDir = findExtractedVersionDir(extractDir)
+    validateDistributionIdentity(versionDir, {
+      omdVersion: releaseManifest.omdVersion,
+      platform: artifact.platform,
+      nodeVersion: artifact.nodeVersion,
+      dshVersion: artifact.dshVersion,
+    })
     runPortableHealthCheck(versionDir)
 
     const targetDir = join(installRoot, 'versions', releaseManifest.omdVersion)
+    mkdirSync(dirname(targetDir), { recursive: true })
     rmSync(targetDir, { recursive: true, force: true })
     renameSync(versionDir, targetDir)
-    stagingDir = null
 
     beginInstallTransaction(installRoot, {
       op: 'update',
@@ -563,8 +658,8 @@ async function update() {
     console.log(`omd: updated to ${releaseManifest.omdVersion}`)
     console.log('omd: run `omd rollback` to return to the previous version if needed.')
   } finally {
-    lock.release()
     if (stagingDir) rmSync(stagingDir, { recursive: true, force: true })
+    lock.release()
   }
 }
 
@@ -832,10 +927,18 @@ switch (command) {
     await doctor(args)
     break
   case 'update':
-    await update()
+    try {
+      await update()
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error))
+    }
     break
   case 'rollback':
-    rollback()
+    try {
+      rollback()
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error))
+    }
     break
   case 'preset':
     preset(args)

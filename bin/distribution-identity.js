@@ -73,8 +73,12 @@ export function detectDistributionMode(packageRoot) {
         distributionRoot: dirname(resolved),
         distributionInfo: info,
       }
-    } catch {
-      // malformed distribution metadata
+    } catch (error) {
+      return {
+        mode: 'corrupt-portable',
+        distributionRoot: dirname(resolved),
+        error: error instanceof Error ? error.message : String(error),
+      }
     }
   }
 
@@ -87,8 +91,12 @@ export function detectDistributionMode(packageRoot) {
         distributionRoot: resolved,
         distributionInfo: info,
       }
-    } catch {
-      // malformed distribution metadata
+    } catch (error) {
+      return {
+        mode: 'corrupt-portable',
+        distributionRoot: resolved,
+        error: error instanceof Error ? error.message : String(error),
+      }
     }
   }
 

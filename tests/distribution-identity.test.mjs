@@ -96,3 +96,19 @@ test('detectDistributionMode detects source checkout, portable bundle, and npm i
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('detectDistributionMode reports corrupt portable metadata instead of npm mode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-identity-corrupt-'))
+  try {
+    const appDir = join(root, 'app')
+    mkdirSync(appDir, { recursive: true })
+    writeFileSync(join(appDir, 'package.json'), JSON.stringify({ name: 'oh-my-dsh' }))
+    writeFileSync(join(root, 'distribution.json'), '{invalid json')
+
+    const mode = detectDistributionMode(appDir)
+    assert.equal(mode.mode, 'corrupt-portable')
+    assert.match(mode.error, /JSON|position|property/i)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

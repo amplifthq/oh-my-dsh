@@ -4,6 +4,9 @@ set -eu
 OMD_REPO="${OMD_REPO:-amplifthq/oh-my-dsh}"
 OMD_INSTALL_ROOT="${OMD_INSTALL_ROOT:-$HOME/.local/share/oh-my-dsh}"
 OMD_BIN_DIR="${OMD_BIN_DIR:-$HOME/.local/bin}"
+LOCK_HELD=0
+LOCK_FILE=''
+manifest_file=''
 
 die() {
   printf 'oh-my-dsh installer: %s\n' "$1" >&2
@@ -63,13 +66,13 @@ fetch_url() {
 json_field() {
   field="$1"
   file_path="$2"
-  sed -n "s/^[[:space:]]*\"${field}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file_path" | head -n 1
+  sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file_path" | head -n 1
 }
 
 json_number_field() {
   field="$1"
   file_path="$2"
-  sed -n "s/^[[:space:]]*\"${field}\"[[:space:]]*:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p" "$file_path" | head -n 1
+  sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p" "$file_path" | head -n 1
 }
 
 extract_platform_block() {
@@ -126,22 +129,93 @@ validate_artifact_url() {
   esac
 }
 
+is_valid_omd_version() {
+  value="$1"
+  case "$value" in
+    */* | *\\* | *..*) return 1 ;;
+  esac
+  awk -v value="$value" 'BEGIN {
+    exit(value ~ /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$/ ? 0 : 1)
+  }'
+}
+
+is_valid_artifact_filename() {
+  value="$1"
+  case "$value" in
+    */* | *\\* | *..*) return 1 ;;
+  esac
+  awk -v value="$value" 'BEGIN {
+    exit(value ~ /^[a-zA-Z0-9_.-]+\.tar\.gz$/ ? 0 : 1)
+  }'
+}
+
+is_valid_sha256() {
+  value="$1"
+  awk -v value="$value" 'BEGIN {
+    exit(length(value) == 64 && value ~ /^[0-9a-fA-F]+$/ ? 0 : 1)
+  }'
+}
+
+archive_path_is_safe() {
+  value="$1"
+  awk -v value="$value" 'BEGIN {
+    gsub(/\\/, "/", value)
+    if (substr(value, 1, 1) == "/") exit 1
+    depth = 0
+    count = split(value, parts, "/")
+    for (i = 1; i <= count; i += 1) {
+      part = parts[i]
+      if (part == "" || part == ".") continue
+      if (part == "..") {
+        if (depth == 0) exit 1
+        depth -= 1
+      } else {
+        depth += 1
+      }
+    }
+    exit 0
+  }'
+}
+
 validate_archive_entries() {
   archive_path="$1"
-  entries="$(tar -tzf "$archive_path")" || die "cannot inspect archive: $archive_path"
-  printf '%s\n' "$entries" | while IFS= read -r entry; do
+  entries_file="${archive_path}.entries.$$"
+  verbose_file="${archive_path}.verbose.$$"
+  tar -tzf "$archive_path" >"$entries_file" || die "cannot inspect archive: $archive_path"
+  tar -tvzf "$archive_path" >"$verbose_file" || die "cannot inspect archive links: $archive_path"
+  entry_count="$(wc -l <"$entries_file" | tr -d ' ')"
+  verbose_count="$(wc -l <"$verbose_file" | tr -d ' ')"
+  if [ "$entry_count" != "$verbose_count" ]; then
+    die "cannot correlate archive entries with link metadata"
+  fi
+
+  while IFS= read -r entry && IFS= read -r listing <&3; do
     [ -z "$entry" ] && continue
     case "$entry" in
       ./*) entry="${entry#./}" ;;
     esac
     [ -z "$entry" ] && continue
-    case "$entry" in
-      /*) die "unsafe archive entry: $entry" ;;
+    archive_path_is_safe "$entry" || die "unsafe archive entry: $entry"
+
+    case "$listing" in
+      l*)
+        case "$listing" in
+          *" -> "*) target="${listing##* -> }" ;;
+          *) die "cannot inspect archive symlink: $entry" ;;
+        esac
+        case "$target" in
+          /* | \\*) die "unsafe archive symlink: $entry -> $target" ;;
+        esac
+        case "$entry" in
+          */*) entry_dir="${entry%/*}" ;;
+          *) entry_dir='.' ;;
+        esac
+        archive_path_is_safe "${entry_dir}/${target}" ||
+          die "unsafe archive symlink: $entry -> $target"
+        ;;
     esac
-    case "$entry" in
-      ../* | */../* | */..) die "unsafe archive entry: $entry" ;;
-    esac
-  done
+  done <"$entries_file" 3<"$verbose_file"
+  rm -f "$entries_file" "$verbose_file"
 }
 
 extract_archive() {
@@ -202,26 +276,54 @@ read_install_state_field() {
 acquire_install_lock() {
   install_root="$1"
   lock_path="${install_root}/update.lock"
+  LOCK_FILE="$lock_path"
   mkdir -p "$install_root"
-  if [ -f "$lock_path" ]; then
+  attempts=0
+  while [ "$attempts" -lt 3 ]; do
+    attempts=$((attempts + 1))
+    umask 077
+    if (
+      set -C
+      printf '{\n  "pid": %s,\n  "createdAt": "%s"\n}\n' \
+        "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$lock_path"
+    ) 2>/dev/null; then
+      LOCK_HELD=1
+      return 0
+    fi
+
+    [ -e "$lock_path" ] || continue
     lock_pid="$(json_number_field pid "$lock_path")"
-    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+    case "$lock_pid" in
+      '' | *[!0-9]*) die "install lock is invalid and cannot be safely removed: $lock_path" ;;
+    esac
+    if kill -0 "$lock_pid" 2>/dev/null; then
       die "install lock is held by another process (PID ${lock_pid})"
     fi
-    rm -f "$lock_path"
-  fi
-  umask 077
-  printf '{"pid":%s,"createdAt":"%s"}\n' "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$lock_path"
+    if ! have_cmd ps; then
+      die "cannot verify whether install lock PID ${lock_pid} is stale"
+    fi
+    if ps -p "$lock_pid" >/dev/null 2>&1; then
+      die "install lock is held by another process (PID ${lock_pid})"
+    fi
+    rm -f "$lock_path" || die "cannot remove stale install lock: $lock_path"
+  done
+  die "could not acquire install lock: $lock_path"
 }
 
 release_install_lock() {
-  install_root="$1"
-  rm -f "${install_root}/update.lock"
+  if [ "$LOCK_HELD" != "1" ] || [ -z "$LOCK_FILE" ]; then
+    return 0
+  fi
+  lock_pid="$(json_number_field pid "$LOCK_FILE")"
+  if [ "$lock_pid" = "$$" ]; then
+    rm -f "$LOCK_FILE"
+  fi
+  LOCK_HELD=0
 }
 
 cleanup_staging_dirs() {
   install_root="$1"
-  for dir in "${install_root}"/.staging.* "${install_root}"/staging.*; do
+  for dir in "${install_root}"/.staging.* "${install_root}"/.staging-* "${install_root}"/staging.*; do
     [ -d "$dir" ] || continue
     rm -rf "$dir"
   done
@@ -246,6 +348,30 @@ run_health_check() {
   rm -rf "$health_home" "$health_dsh"
 }
 
+verify_distribution_identity() {
+  version_dir="$1"
+  expected_omd_version="$2"
+  expected_platform="$3"
+  expected_node_version="$4"
+  expected_dsh_version="$5"
+  identity_file="${version_dir}/distribution.json"
+  [ -f "$identity_file" ] || die "distribution identity is missing: $identity_file"
+
+  actual_omd_version="$(json_field omdVersion "$identity_file")"
+  actual_platform="$(json_field platform "$identity_file")"
+  actual_node_version="$(json_field nodeVersion "$identity_file")"
+  actual_dsh_version="$(json_field dshVersion "$identity_file")"
+
+  [ "$actual_omd_version" = "$expected_omd_version" ] ||
+    die "distribution identity omdVersion mismatch (expected $expected_omd_version, got ${actual_omd_version:-missing})"
+  [ "$actual_platform" = "$expected_platform" ] ||
+    die "distribution identity platform mismatch (expected $expected_platform, got ${actual_platform:-missing})"
+  [ "$actual_node_version" = "$expected_node_version" ] ||
+    die "distribution identity nodeVersion mismatch (expected $expected_node_version, got ${actual_node_version:-missing})"
+  [ "$actual_dsh_version" = "$expected_dsh_version" ] ||
+    die "distribution identity dshVersion mismatch (expected $expected_dsh_version, got ${actual_dsh_version:-missing})"
+}
+
 resolve_manifest_url() {
   if [ -n "${OMD_MANIFEST_URL:-}" ]; then
     printf '%s' "$OMD_MANIFEST_URL"
@@ -254,9 +380,11 @@ resolve_manifest_url() {
   if [ -n "${OMD_VERSION:-}" ]; then
     version_tag="$OMD_VERSION"
     case "$version_tag" in
-      v*) ;;
-      *) version_tag="v${version_tag}" ;;
+      v*) requested_version="${version_tag#v}" ;;
+      *) requested_version="$version_tag"; version_tag="v${version_tag}" ;;
     esac
+    is_valid_omd_version "$requested_version" ||
+      die "invalid OMD_VERSION: $OMD_VERSION"
     printf 'https://github.com/%s/releases/download/%s/release-manifest.json' "$OMD_REPO" "$version_tag"
     return 0
   fi
@@ -305,12 +433,15 @@ cleanup() {
   if [ -n "$staging_root" ] && [ -d "$staging_root" ]; then
     rm -rf "$staging_root"
   fi
-  release_install_lock "$install_root" 2>/dev/null || true
+  if [ -n "$manifest_file" ]; then
+    rm -f "$manifest_file"
+  fi
+  release_install_lock 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-cleanup_staging_dirs "$install_root"
 acquire_install_lock "$install_root"
+cleanup_staging_dirs "$install_root"
 
 manifest_file="$(mktemp "${TMPDIR:-/tmp}/omd-manifest.XXXXXX")"
 case "$manifest_url" in
@@ -332,17 +463,28 @@ if [ "$channel" != "stable" ]; then
 fi
 
 omd_version="$(json_field omdVersion "$manifest_file")"
-if [ -z "$omd_version" ]; then
-  die 'invalid release manifest: missing omdVersion'
-fi
+is_valid_omd_version "$omd_version" ||
+  die 'invalid release manifest omdVersion'
 
 artifact_filename="$(artifact_field "$platform" filename "$manifest_file")"
 artifact_sha256="$(artifact_field "$platform" sha256 "$manifest_file")"
 artifact_url="$(artifact_field "$platform" url "$manifest_file")"
+artifact_platform="$(artifact_field "$platform" platform "$manifest_file")"
+artifact_node_version="$(artifact_field "$platform" nodeVersion "$manifest_file")"
+artifact_dsh_version="$(artifact_field "$platform" dshVersion "$manifest_file")"
 
-if [ -z "$artifact_filename" ] || [ -z "$artifact_sha256" ] || [ -z "$artifact_url" ]; then
+if [ -z "$artifact_filename" ] || [ -z "$artifact_sha256" ] || [ -z "$artifact_url" ] ||
+  [ -z "$artifact_platform" ] || [ -z "$artifact_node_version" ] ||
+  [ -z "$artifact_dsh_version" ]; then
   die "no artifact available for platform ${platform} in release ${omd_version}"
 fi
+is_valid_artifact_filename "$artifact_filename" ||
+  die "invalid artifact filename: $artifact_filename"
+is_valid_sha256 "$artifact_sha256" ||
+  die "invalid artifact sha256 for $artifact_filename"
+[ "$artifact_platform" = "$platform" ] ||
+  die "artifact platform mismatch (expected $platform, got $artifact_platform)"
+artifact_sha256="$(printf '%s' "$artifact_sha256" | tr 'A-F' 'a-f')"
 
 validate_artifact_url "$artifact_url"
 
@@ -351,11 +493,7 @@ archive_path="${staging_root}/artifact.tar.gz"
 fetch_url "$artifact_url" "$archive_path"
 
 digest="$(sha256_file "$archive_path")"
-case "$digest" in
-  [A-F]*)
-    digest="$(printf '%s' "$digest" | tr 'A-F' 'a-f')"
-    ;;
-esac
+digest="$(printf '%s' "$digest" | tr 'A-F' 'a-f')"
 if [ "$digest" != "$artifact_sha256" ]; then
   die "artifact checksum mismatch (expected ${artifact_sha256}, got ${digest})"
 fi
@@ -363,6 +501,8 @@ fi
 extract_dir="${staging_root}/extract"
 extract_archive "$archive_path" "$extract_dir"
 version_dir="$(find_extracted_version_dir "$extract_dir")"
+verify_distribution_identity \
+  "$version_dir" "$omd_version" "$platform" "$artifact_node_version" "$artifact_dsh_version"
 run_health_check "$version_dir"
 
 mkdir -p "${install_root}/versions"

@@ -178,7 +178,8 @@ async function materializeNodeRuntime(versionDir, platform, nodeVersion, dryRunN
   const nodeTarget = join(runtimeBinDir, 'node')
 
   if (dryRunNode) {
-    copyFileSync(process.execPath, nodeTarget)
+    const localNode = process.execPath.replace(/'/g, "'\\''")
+    writeFileSync(nodeTarget, `#!/bin/sh\nexec '${localNode}' "$@"\n`, 'utf8')
     chmodSync(nodeTarget, 0o755)
     const licensePath = join(versionDir, 'runtime', 'LICENSE')
     writeFileSync(
@@ -231,11 +232,23 @@ function createAppSelfLink(appDir) {
 }
 
 function writeLauncher(launcherPath) {
-  const script = `#!/bin/sh
-set -eu
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$SCRIPT_DIR/runtime/bin/node" "$SCRIPT_DIR/app/bin/omd" "$@"
-`
+  const script = [
+    '#!/bin/sh',
+    'set -eu',
+    'PRG="$0"',
+    'while [ -h "$PRG" ]; do',
+    '  ls=`ls -ld "$PRG"`',
+    '  link=`expr "$ls" : \'.*-> \\(.*\\)$\'`',
+    '  if expr "$link" : \'/.*\' > /dev/null; then',
+    '    PRG="$link"',
+    '  else',
+    '    PRG=`dirname "$PRG"`"/$link"',
+    '  fi',
+    'done',
+    'DIST_ROOT="$(cd "$(dirname "$PRG")/.." && pwd)"',
+    'exec "$DIST_ROOT/runtime/bin/node" "$DIST_ROOT/app/bin/omd" "$@"',
+    '',
+  ].join('\n')
   writeFileSync(launcherPath, script, { mode: 0o755 })
 }
 

@@ -11,6 +11,31 @@
       "inject": ["skills"]
     },
     "config": {},
-    "source": "upstream"
+    "source": "upstream",
+    "provenance": {
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "publisher": "@deepseek-ai",
+      "integrity": "sha512-k268iImXPFwA3barkSqusu9OlA8BcC0O8ZEvs5IY9bUJPCC0Tlw4VY8bumFt/2DSwh5cV4bBzZk96S8XA1Pd2A=="
+    }
+  },
+  {
+    "id": "dsh-pkg-info",
+    "module": "dsh-pkg-info",
+    "version": "0.1.1",
+    "summary": "Query public npm and PyPI package metadata, exact versions, dependencies, release counts, and provenance links.",
+    "risk": "Adds the model-visible pkg_info tool. Initial GET requests target the public npm or PyPI registry origin and use the platform's default redirect handling. Responses can include public author emails and large dependency maps.",
+    "manifest": {
+      "name": "dsh-pkg-info",
+      "provide": [],
+      "inject": ["tools"]
+    },
+    "config": {},
+    "source": "community",
+    "provenance": {
+      "repository": "https://github.com/ZhijiangTang/dsh-pkg-info",
+      "publisher": "zhijiangtang <zhijiangtang.ai@gmail.com>",
+      "integrity": "sha512-udJU1i3166s05t7dAs3LnLYWlEOLatqjbxnBHO21JlkvD4cAKxul9iipzEATBwXJWxaf4iYEX3HR8Ay0ly5Xlw==",
+      "commit": "d0f339f486148ae15948a7b4b9d5a144dd513238"
+    }
   }
 ]

@@ -1,6 +1,14 @@
 // tests/smoke-portable-distribution.mjs
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -37,6 +45,24 @@ test('portable distribution builds, packages, and extracts with valid structure'
       assert.ok(existsSync(join(versionDir, 'bin', 'omd')))
       assert.ok(existsSync(join(versionDir, 'runtime', 'bin', 'node')))
       assert.ok(existsSync(join(versionDir, 'distribution.json')))
+
+      const installRoot = join(extractDir, 'install-root')
+      const userBin = join(extractDir, 'home', '.local', 'bin')
+      mkdirSync(installRoot, { recursive: true })
+      mkdirSync(userBin, { recursive: true })
+      symlinkSync(versionDir, join(installRoot, 'current'))
+      const launcher = join(userBin, 'omd')
+      symlinkSync(join(installRoot, 'current', 'bin', 'omd'), launcher)
+
+      const launched = spawnSync(launcher, ['--version'], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      })
+      const releaseManifest = JSON.parse(
+        readFileSync(join(outDir, 'release-manifest.json'), 'utf8'),
+      )
+      assert.equal(launched.status, 0, launched.stderr || launched.stdout)
+      assert.equal(launched.stdout.trim(), releaseManifest.omdVersion)
     } finally {
       rmSync(extractDir, { recursive: true, force: true })
     }

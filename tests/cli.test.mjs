@@ -251,6 +251,32 @@ test('portable omd doctor reports distribution identity and optional file manife
     })
     assert.equal(verified.status, 0, verified.stderr || verified.stdout)
     assert.match(verified.stdout, /file manifest: ok/)
+
+    writeFileSync(join(versionDir, 'app', 'tampered.js'), 'tampered\n')
+    const mismatch = runPortable(omd, ['doctor', '--verify'], {
+      DSH_HOME: dshHome,
+      OMD_INSTALL_ROOT: join(root, 'install'),
+    })
+    assert.notEqual(mismatch.status, 0)
+    assert.match(mismatch.stdout, /file manifest: FAILED/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('portable omd reports corrupt distribution metadata instead of npm mode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-portable-corrupt-'))
+  try {
+    const { dshHome, omd, versionDir } = createPortableInstall(root)
+    writeFileSync(join(versionDir, 'distribution.json'), '{invalid json')
+
+    const doctor = runPortable(omd, ['doctor'], {
+      DSH_HOME: dshHome,
+      OMD_INSTALL_ROOT: join(root, 'install'),
+    })
+    assert.notEqual(doctor.status, 0)
+    assert.match(doctor.stderr, /portable distribution metadata is corrupt/i)
+    assert.doesNotMatch(doctor.stdout, /mode: npm/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -303,6 +329,31 @@ test('portable omd rollback switches current back to the retained previous versi
   }
 })
 
+test('portable omd rollback refuses a target whose embedded identity does not match', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-portable-rollback-identity-'))
+  try {
+    const { installRoot, dshHome, omd } = createPortableInstall(root, {
+      version: '0.2.0',
+      previousVersion: '0.1.7',
+    })
+    writeFileSync(
+      join(installRoot, 'versions', '0.1.7', 'distribution.json'),
+      JSON.stringify(distributionInfo('9.9.9')),
+    )
+
+    const rollback = runPortable(omd, ['rollback'], {
+      DSH_HOME: dshHome,
+      OMD_INSTALL_ROOT: installRoot,
+    })
+    assert.notEqual(rollback.status, 0)
+    assert.match(rollback.stderr, /identity.*does not match|does not match.*identity/i)
+    assert.equal(readlinkSync(join(installRoot, 'current')), 'versions/0.2.0')
+    assert.equal(readlinkSync(join(installRoot, 'previous')), 'versions/0.1.7')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('omd update explains npm management outside portable mode', () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-update-npm-'))
   try {
@@ -336,6 +387,7 @@ test('portable omd update reports already current without downloading', () => {
             filename: 'oh-my-dsh-v0.2.0.tar.gz',
             sha256: '0'.repeat(64),
             size: 1,
+            platform: normalizePlatform(),
             url: 'https://github.com/amplifthq/oh-my-dsh/releases/download/v0.2.0/oh-my-dsh-v0.2.0.tar.gz',
             nodeVersion: '22.19.0',
             dshVersion: '0.1.0-rc.6',

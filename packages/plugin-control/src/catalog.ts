@@ -2,7 +2,14 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { dirname, join, parse } from 'node:path'
 
-export type OrganSource = 'upstream' | 'oh-my-dsh'
+export type OrganSource = 'upstream' | 'oh-my-dsh' | 'community'
+
+export interface OrganProvenance {
+  repository: string
+  publisher: string
+  integrity: string
+  commit?: string
+}
 
 export interface OrganManifest {
   name?: string
@@ -19,6 +26,7 @@ export interface OrganIndexEntry {
   manifest: OrganManifest
   config?: Record<string, unknown>
   source: OrganSource
+  provenance?: OrganProvenance
 }
 
 export interface ResolvedOrganPackage {
@@ -85,6 +93,45 @@ function requireJsonObject(value: unknown, field: string): Record<string, unknow
   }
 }
 
+function parseProvenance(value: unknown): OrganProvenance {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('plugin provenance must be an object')
+  }
+  const record = value as Record<string, unknown>
+  const repository = requireString(record.repository, 'provenance.repository')
+  let parsedRepository: URL
+  try {
+    parsedRepository = new URL(repository)
+  } catch {
+    throw new Error('plugin provenance.repository must be an absolute HTTPS URL')
+  }
+  if (
+    parsedRepository.protocol !== 'https:' ||
+    parsedRepository.username ||
+    parsedRepository.password ||
+    parsedRepository.search ||
+    parsedRepository.hash
+  ) {
+    throw new Error(
+      'plugin provenance.repository must be an HTTPS URL without credentials, query, or fragment',
+    )
+  }
+  const publisher = requireString(record.publisher, 'provenance.publisher')
+  const integrity = requireString(record.integrity, 'provenance.integrity')
+  if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(integrity)) {
+    throw new Error('plugin provenance.integrity must be an npm sha512 integrity string')
+  }
+  const provenance: OrganProvenance = { repository, publisher, integrity }
+  if (record.commit !== undefined) {
+    const commit = requireString(record.commit, 'provenance.commit')
+    if (!/^[0-9a-f]{40}$/.test(commit)) {
+      throw new Error('plugin provenance.commit must be a lowercase 40-character git commit')
+    }
+    provenance.commit = commit
+  }
+  return provenance
+}
+
 function parseEntry(value: unknown, index: number): OrganIndexEntry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`plugin index entry ${index} must be an object`)
@@ -122,8 +169,13 @@ function parseEntry(value: unknown, index: number): OrganIndexEntry {
     manifest.name = requireString(manifestRecord.name, 'manifest.name')
   }
   const source = requireString(record.source, 'source')
-  if (source !== 'upstream' && source !== 'oh-my-dsh') {
-    throw new Error(`plugin source must be "upstream" or "oh-my-dsh"`)
+  if (source !== 'upstream' && source !== 'oh-my-dsh' && source !== 'community') {
+    throw new Error(`plugin source must be "upstream", "oh-my-dsh", or "community"`)
+  }
+  const provenance =
+    record.provenance === undefined ? undefined : parseProvenance(record.provenance)
+  if (source === 'community' && provenance === undefined) {
+    throw new Error('community plugin entries must include reviewed provenance')
   }
   const entry: OrganIndexEntry = {
     id,
@@ -135,6 +187,7 @@ function parseEntry(value: unknown, index: number): OrganIndexEntry {
     source,
   }
   if (record.config !== undefined) entry.config = requireJsonObject(record.config, 'config')
+  if (provenance !== undefined) entry.provenance = provenance
   return entry
 }
 
