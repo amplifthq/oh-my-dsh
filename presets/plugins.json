@@ -2,7 +2,7 @@
   {
     "id": "dsh-skill-badge",
     "module": "@deepseek-ai/dsh-skill-badge",
-    "version": "0.1.0-rc.6",
+    "version": "0.1.0-rc.7",
     "summary": "Expose the upstream dsh-badge skill for attribution in generated documents and pull requests.",
     "risk": "Adds model-visible instructions that may insert DeepSeek Harness attribution into generated content.",
     "manifest": {
@@ -15,7 +15,7 @@
     "provenance": {
       "repository": "https://github.com/deepseek-ai/deepseek-harness",
       "publisher": "@deepseek-ai",
-      "integrity": "sha512-k268iImXPFwA3barkSqusu9OlA8BcC0O8ZEvs5IY9bUJPCC0Tlw4VY8bumFt/2DSwh5cV4bBzZk96S8XA1Pd2A=="
+      "integrity": "sha512-01Ue3mvLYyBwNj+fAuTUZN4gJLuDySPDqAZhCtWoYagZudCuLB8kAdpYWztKA4TRVSyml+EfGo1LrWvQeTD1wQ=="
     }
   },
   {

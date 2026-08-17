@@ -536,7 +536,7 @@ test('the bundled catalog loads every exact-pinned plugin only on proposal apply
       {
         id: 'dsh-skill-badge',
         module: '@deepseek-ai/dsh-skill-badge',
-        version: '0.1.0-rc.6',
+        version: '0.1.0-rc.7',
       },
       {
         id: 'dsh-pkg-info',

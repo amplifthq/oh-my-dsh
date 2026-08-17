@@ -40,6 +40,9 @@ Upstream compatibility for each release is listed in the
 
 ### Changed
 
+- Upstream compatibility: upgraded all `@deepseek-ai/dsh*` dependencies to
+  `0.1.0-rc.7`, and updated `@deepseek-ai/dsh-skill-badge` in the curated
+  catalog to `0.1.0-rc.7` with its reviewed npm integrity hash.
 - README quick start leads with the portable bootstrap installer, followed by
   manual tarball verification and npm options. Capability tiers (Core, Bundled
   Optional, Curated Integrations, User Growth) are documented explicitly.

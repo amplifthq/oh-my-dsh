@@ -31,7 +31,7 @@ A plugin is eligible only when all of the following are true:
 
 ## Current catalog
 
-- `dsh-skill-badge@0.1.0-rc.6` is the upstream seed entry. Its module top level builds immutable provider metadata and file URLs; it reads the bundled Markdown only when the skill is requested. `apply` registers one provider on the existing `skills` service, and Cordis removes that registration on disposal.
+- `dsh-skill-badge@0.1.0-rc.7` is the upstream seed entry. Its module top level builds immutable provider metadata and file URLs; it reads the bundled Markdown only when the skill is requested. `apply` registers one provider on the existing `skills` service, and Cordis removes that registration on disposal.
 - `dsh-pkg-info@0.1.1` is the first community entry. The reviewed npm artifact maps to `ZhijiangTang/dsh-pkg-info` commit `d0f339f486148ae15948a7b4b9d5a144dd513238`; its top level only declares constants and pure helpers. `apply` registers the `pkg_info` tool, and real `dsh-tools` registry tests prove disposal removes it. Initial GET requests target fixed `https://registry.npmjs.org` or `https://pypi.org/pypi` origins and use the platform's default redirect handling. The plugin does not read files, spawn processes, inspect credentials, or accept an arbitrary host. Results may include public author emails and large dependency maps, which the catalog risk statement exposes before approval.
 
 The initial design considered `dsh-attachment`, `dsh-timeout`, and `dsh-code-runtime`. They were not admitted: attachment is already backed by `dsh-attachment-local` in the base bundle, timeout is a utility library rather than a Cordis plugin, and code-runtime is an abstract service seam rather than a concrete plugin.

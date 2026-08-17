@@ -192,7 +192,7 @@ This is the strongest grant OMD can make: an active plugin runs in-process with 
 
 The deliberately small catalog currently contains two reviewed plugins:
 
-- `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.6` pin and is inert until an approved session load.
+- `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.7` pin and is inert until an approved session load.
 - `dsh-pkg-info` — adds a read-only `pkg_info` tool for public npm and PyPI metadata. The catalog pins the reviewed community artifact at `0.1.1`, records its repository, publisher, npm integrity, and source commit, and states its registry network and public-metadata exposure before approval.
 
 Catalog admission, rejection evidence, and review requirements are documented in [Plugin catalog curation](docs/organ-bank-curation.md).
@@ -312,7 +312,7 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 
 | oh-my-dsh | DeepSeek Harness (`@deepseek-ai/dsh*`) | Node.js / runtime                                     |
 | --------- | -------------------------------------- | ----------------------------------------------------- |
-| 0.2.x     | `0.1.0-rc.6` (exact pin)               | Embedded (portable) or `^22.19.0 \|\| >=24.0.0` (npm) |
+| 0.2.x     | `0.1.0-rc.7` (exact pin)               | Embedded (portable) or `^22.19.0 \|\| >=24.0.0` (npm) |
 | 0.1.x     | `0.1.0-rc.6` (exact pin)               | `^22.19.0 \|\| >=24.0.0`                              |
 
 Upstream is in developer preview, so `oh-my-dsh` pins one tested release and never follows breaking changes silently. A [weekly canary workflow](.github/workflows/canary.yml) additionally tests the overlay against `dsh@next`, so an incompatible upcoming release is filed as an issue before it ships. Upgrades follow [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md).
