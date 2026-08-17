@@ -1,15 +1,15 @@
 name: Release
 
-# Publishes to npm with provenance when a `v*` tag is pushed.
+# Publishes to npm with provenance and creates a GitHub Release when a `v*` tag is pushed.
 # Requires the NPM_TOKEN repository secret (npm granular automation token
-# with publish access to the oh-my-dsh package).
+# with publish access to the oh-my-dsh package) or npm Trusted Publishing.
 
 on:
   push:
     tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
           test "$tag" = "$manifest" || { echo "tag v$tag does not match package.json $manifest" >&2; exit 1; }
           test "$exported" = "$manifest" || { echo "src/index.ts exports $exported but package.json says $manifest" >&2; exit 1; }
 
-      - name: Publish
+      - name: Publish to npm
         # Idempotent: a tag whose version is already on the registry (e.g. a
         # release published locally) records green instead of failing.
         run: |
@@ -58,3 +58,28 @@ jobs:
           npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "GitHub release $tag already exists; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node -e '
+            import { readFileSync, writeFileSync } from "node:fs"
+            const changelog = readFileSync("CHANGELOG.md", "utf8")
+            const version = process.argv[1]
+            const regex = new RegExp(`## \\[${version.replace(/\./g, "\\.")}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n## \\[|$)`)
+            const match = changelog.match(regex)
+            const notes = match ? match[1].trim() : ""
+            writeFileSync("release-notes.md", notes)
+          ' "$version"
+          if [ -s release-notes.md ]; then
+            gh release create "$tag" --title "$tag" --notes-file release-notes.md --verify-tag
+          else
+            gh release create "$tag" --title "$tag" --generate-notes --verify-tag
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
