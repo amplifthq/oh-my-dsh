@@ -107,6 +107,10 @@ The deliberately small first catalog contains one upstream plugin:
 
 Catalog admission and review requirements are documented in [Plugin catalog curation](docs/organ-bank-curation.md).
 
+### Capability discovery plane
+
+`capability_search` is a read-only search surface over five capability kinds: model-visible tools, skills, slash commands, inert or active MCP servers, and curated session plugins. Stable refs look like `tool:bash`, `mcp:omd-playwright`, or `plugin:dsh-skill-badge`. Each hit returns status, summary, provenance, and an exact next step — call the tool, load the skill, invoke `/command`, or route through `mcp_control` / `plugin_control` prepare actions. Discovery never starts an MCP process, imports a package, expands credentials, or creates a proposal. `/omd-capabilities [query]` is the human-facing counterpart.
+
 ### Daily-use tools upstream does not prioritize
 
 - `@file` mentions: reference workspace files in your message as `@path`, `@path:12-40`, or `@"path with spaces"`. The mentioned content is attached to the same model step, bounded in size, and rendered as `hash_edit`-compatible anchors. Parsing is text-only (no composer autocomplete); files outside the workspace are never attached.

@@ -31,6 +31,13 @@ Upstream compatibility for each release is listed in the
   await Cordis effect reversal. Arbitrary packages and runtime installation
   are unrepresentable in v1. The first bank entry is the upstream
   `dsh-skill-badge@0.1.0-rc.6`.
+- Capability discovery plane: `capability_search` and `/omd-capabilities`
+  search model-visible tools, skills, slash commands, MCP servers, and curated
+  session plugins through stable refs (`tool:…`, `mcp:…`, `plugin:…`). Hits
+  return status and an exact next action; activation still requires the
+  existing `mcp_control` / `plugin_control` prepare path plus an approved
+  `proposal_control apply`. Discovery itself never starts processes, imports
+  packages, expands credentials, or creates proposals.
 
 ## [0.1.4] - 2026-08-17
 

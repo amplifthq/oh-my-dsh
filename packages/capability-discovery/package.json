@@ -1,0 +1,17 @@
+{
+  "name": "@oh-my-dsh/capability-discovery",
+  "version": "0.1.0",
+  "description": "Unified, read-only search across tools, skills, commands, MCP servers, and curated session plugins.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "oh-my-dsh",
+    "capabilities",
+    "discovery"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

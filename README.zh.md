@@ -107,6 +107,10 @@ omd trust add .
 
 准入和审查规则见[《精选插件库策展规范》](docs/organ-bank-curation.md)。
 
+### 能力发现平面
+
+`capability_search` 是只读搜索入口，覆盖五类能力：模型可见 tools、skills、斜杠命令、惰性/已激活 MCP server，以及精选 session 插件。稳定引用形如 `tool:bash`、`mcp:omd-playwright`、`plugin:dsh-skill-badge`。每条结果带状态、摘要、来源，以及精确下一步：直接调用 tool、加载 skill、执行 `/command`，或走 `mcp_control` / `plugin_control` 的 prepare 动作。发现平面从不启动 MCP 进程、从不 import 包、从不展开凭据、也从不创建 proposal。人类侧对应命令是 `/omd-capabilities [查询]`。
+
 ### 上游不会优先做的日用工具
 
 - `@file` 引用：在消息中用 `@path`、`@path:12-40` 或 `@"带空格的路径"` 引用工作区文件。被引用内容随同一 model step 注入、有大小上限，并渲染为 `hash_edit` 可直接使用的 anchor。仅做文本解析（输入框没有自动补全）；工作区之外的文件永远不会被注入。
