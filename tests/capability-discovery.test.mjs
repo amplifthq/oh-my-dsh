@@ -4,6 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 
 import {
   buildCommandCapability,
+  buildForgedPluginCapability,
   buildMcpCapability,
   buildPluginCapability,
   buildSkillCapability,
@@ -179,6 +180,27 @@ test('builders attach exact next-action instructions for each kind', () => {
   assert.deepEqual(activePlugin.nextAction.args, {
     action: 'prepare_unload',
     plugin_id: 'dsh-skill-badge',
+  })
+
+  const forged = buildForgedPluginCapability({
+    slug: 'forged-echo',
+    scope: 'user',
+    summary: 'Echo.',
+    revision: 2,
+    digest: 'a'.repeat(64),
+    digestMatches: true,
+    active: false,
+    status: 'ok',
+    risk: 'In-process agent-authored code.',
+    invocations: 3,
+  })
+  assert.equal(forged.forged, true)
+  assert.equal(forged.ref, 'plugin:forged%2Fuser%2Fforged-echo')
+  assert.equal(forged.nextAction.tool, 'plugin_forge')
+  assert.deepEqual(forged.nextAction.args, {
+    action: 'prepare_load',
+    scope: 'user',
+    name: 'forged-echo',
   })
 })
 
@@ -435,6 +457,35 @@ test('aggregateCapabilities indexes all five kinds with exact next actions', () 
   })
 })
 
+test('aggregateCapabilities marks forged plugins without colliding with curated ids', () => {
+  const snapshot = aggregateCapabilities(
+    sampleSources({
+      forgedPlugins: [
+        {
+          slug: 'forged-echo',
+          scope: 'user',
+          summary: 'Agent-authored echo tool.',
+          revision: 1,
+          digest: 'b'.repeat(64),
+          digestMatches: true,
+          active: false,
+          status: 'ok',
+          risk: 'In-process.',
+          invocations: 0,
+        },
+      ],
+    }),
+  )
+  assert.equal(snapshot.counts.plugin, 2)
+  const forged = showCapability(snapshot.capabilities, 'plugin:forged/user/forged-echo')
+  assert.equal(forged?.forged, true)
+  const hits = searchCapabilities(snapshot.capabilities, 'forged echo')
+  assert.ok(
+    hits.some((hit) => hit.forged === true && hit.ref === 'plugin:forged%2Fuser%2Fforged-echo'),
+  )
+  assert.match(formatCapabilityHits(hits), /forged/)
+})
+
 test('aggregateCapabilities is read-only over the provided snapshots', () => {
   const sources = sampleSources()
   const frozenTools = Object.freeze([...sources.tools])
@@ -500,7 +551,7 @@ test('browser intent retrieves the inert Playwright MCP through aggregation', ()
   assert.doesNotMatch(JSON.stringify(hit), /SECRET|password|token=/i)
 })
 
-function runtimeHarness({ skillsSnapshot, onMcpList, onPluginList } = {}) {
+function runtimeHarness({ skillsSnapshot, onMcpList, onPluginList, pluginForge } = {}) {
   const ctx = new Context()
   const registeredTools = new Map()
   const registeredCommands = new Map()
@@ -567,6 +618,7 @@ function runtimeHarness({ skillsSnapshot, onMcpList, onPluginList } = {}) {
       return []
     },
   })
+  if (pluginForge) ctx.provide('pluginForge', pluginForge)
 
   return { ctx, registeredTools, registeredCommands, promptSections }
 }
@@ -650,6 +702,52 @@ test('runtime propagates tool and command cancellation without returning partial
   })
   commandAbort.abort(new Error('command cancelled'))
   await assert.rejects(commandRun, /command cancelled/)
+
+  await harness.ctx.root.fiber.dispose()
+})
+
+test('runtime records an authoritative capability_search miss through plugin forge', async () => {
+  const misses = []
+  const harness = runtimeHarness({
+    pluginForge: {
+      listForDiscovery: async () => [
+        {
+          slug: 'forged-echo',
+          scope: 'user',
+          summary: 'Echo.',
+          revision: 1,
+          digest: 'c'.repeat(64),
+          digestMatches: true,
+          active: false,
+          status: 'ok',
+          risk: 'In-process.',
+          invocations: 4,
+        },
+      ],
+      recordSearchMiss: async (input) => {
+        misses.push(input)
+      },
+    },
+  })
+  const fiber = harness.ctx.plugin(CapabilityDiscoveryRuntime)
+  await fiber
+  const tool = harness.registeredTools.get('capability_search')
+  const agent = fakeAgent(harness.ctx)
+
+  const found = JSON.parse(
+    await tool.execute({ action: 'search', query: 'forged echo' }, { agent }),
+  )
+  assert.equal(found.hits[0].forged, true)
+  assert.equal(found.hits[0].nextAction.tool, 'plugin_forge')
+  assert.equal(misses.length, 0)
+
+  const empty = JSON.parse(
+    await tool.execute({ action: 'search', query: 'pdf ocr table extraction' }, { agent }),
+  )
+  assert.equal(empty.hits.length, 0)
+  assert.equal(misses.length, 1)
+  assert.equal(misses[0].query, 'pdf ocr table extraction')
+  assert.equal(misses[0].hitCount, 0)
 
   await harness.ctx.root.fiber.dispose()
 })

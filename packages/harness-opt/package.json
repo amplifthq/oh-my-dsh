@@ -1,0 +1,16 @@
+{
+  "name": "@oh-my-dsh/harness-opt",
+  "version": "0.1.0",
+  "description": "Agent-facing opt_control: durable bandit over promote/forge/unload/save. Suggests only; never applies.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "optimizer",
+    "oh-my-dsh"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

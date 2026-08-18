@@ -1,0 +1,32 @@
+{
+  "id": "no-extra-write",
+  "summary": "A no-op verify does not write files outside the fixture.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-cwd-clean"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "fixture": "fixture",
+  "assertions": [
+    {
+      "id": "noop-verify",
+      "skill": "assert-cwd-clean",
+      "kind": "command-exit",
+      "argv": ["node", "verify.mjs"],
+      "expect_status": 0
+    },
+    {
+      "id": "allowed-present",
+      "skill": "assert-cwd-clean",
+      "kind": "path-exists",
+      "path": "allowed.txt"
+    },
+    {
+      "id": "extra-absent",
+      "skill": "assert-cwd-clean",
+      "kind": "path-absent",
+      "path": "extra.dat"
+    }
+  ],
+  "timeout_ms": 30000
+}

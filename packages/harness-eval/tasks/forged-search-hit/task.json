@@ -1,0 +1,19 @@
+{
+  "id": "forged-search-hit",
+  "summary": "A forged plugin is visible to capability search.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-search-hit"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "assertions": [
+    {
+      "id": "search-forged",
+      "skill": "assert-search-hit",
+      "kind": "search-hits",
+      "query": "eval-echo forged",
+      "ref": "plugin:forged/user/eval-echo"
+    }
+  ],
+  "timeout_ms": 30000
+}

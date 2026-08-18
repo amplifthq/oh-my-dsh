@@ -94,6 +94,15 @@
     - id: omd-plugin-forge
       name: 'oh-my-dsh/plugin-forge'
 
+    # Frozen-suite scoring: snapshot, run, compare, show. Does not apply
+    # proposals or write the curated catalog.
+    - id: omd-harness-eval
+      name: 'oh-my-dsh/harness-eval'
+
+    # Durable bandit over promote/forge/unload/save. Suggests only; never applies.
+    - id: omd-harness-opt
+      name: 'oh-my-dsh/harness-opt'
+
     # Read-only unified search across tools, skills, commands, MCP servers,
     # and curated plugins. Activation still goes through the control tools.
     - id: omd-capability-discovery

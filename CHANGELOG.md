@@ -10,6 +10,37 @@ Upstream compatibility for each release is listed in the
 
 ## [Unreleased]
 
+### Added
+
+- `eval_control` (`oh-my-dsh/harness-eval`) is a four-action eval workflow
+  (`snapshot`, `run`, `compare`, `show`) mounted after plugin-forge. It
+  captures a harness snapshot, runs the bundled `omd-eval-v1` suite in an
+  isolated overlay, writes score/assertion/trace files under
+  `$DSH_HOME/omd/eval`, and compares conditions. `compare mode=diff` is the
+  promotion gate; `compare mode=ablate` is the causal with/without test.
+  Scores are machine assertions only. Eval never applies proposals or writes
+  `presets/plugins.json`. `/omd-eval` lists tasks and recent runs.
+- `opt_control` (`oh-my-dsh/harness-opt`) is a two-action proposer
+  (`suggest`, `show`) mounted after eval. It keeps a durable bandit over
+  `prepare_promote`, `prepare_forge`, `prepare_unload`, `prepare_save`, and
+  `noop` in `$DSH_HOME/omd/opt/policy.json`. `suggest` credits new eval
+  compares, observes legal candidates (eval gates still apply), and returns
+  one arm plus a next tool call. It never applies proposals, writes plugin
+  source or skill bodies, or writes `presets/plugins.json`. `/omd-opt` reads
+  the policy file.
+- Plugin forge selection pressure: tool invocations are attributed through
+  Cordis effect labels (and mount-time schema diffs), persisted per forged
+  plugin, and shown by `plugin_forge usage` / `/omd-forged`.
+- `capability_search` indexes forged plugins with a `forged` marker and
+  records authoritative zero-hit searches as a capability-gap journal that
+  steers `plugin_forge`. `/omd-gaps` lists recent misses.
+- `plugin_forge prepare_promote` writes a human-reviewed promotion packet
+  (`AUDIT.md`, placeholder catalog draft, usage, revision log). When
+  `eval_control` is mounted, promote requires a stored non-regressing
+  `compare mode=diff` and a faithful `compare mode=ablate`. Updating an
+  existing skill with `skill_control prepare_save` requires the same
+  faithful ablate. The runtime never writes `presets/plugins.json`.
+
 ### Fixed
 
 - Portable `omd` no longer treats a leftover npm/source profile as ready.

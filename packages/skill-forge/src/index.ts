@@ -10,6 +10,7 @@ import type {
   ProposalEffect,
   ProposalRuntime,
 } from '../../proposals/src/index.ts'
+import { capabilityRef } from '../../capability-discovery/src/catalog.js'
 import {
   planSkillWrite,
   renderSkillMarkdown,
@@ -172,8 +173,10 @@ export class SkillForgeRuntime extends Service {
       text:
         'When a non-trivial task ends with a verified, repeatable procedure, offer to distill it: ' +
         'draft the steps and call skill_control prepare_save (scope "project" for repo-specific ' +
-        'procedures, "user" otherwise). The skill is written only when the user approves ' +
-        'proposal_control apply — never claim a skill was saved before an approved apply reports success.',
+        'procedures, "user" otherwise). Updating an existing skill requires an eval_control ' +
+        'compare mode=ablate that shows the skill was causally used. The skill is written only ' +
+        'when the user approves proposal_control apply — never claim a skill was saved before ' +
+        'an approved apply reports success.',
     })
 
     ctx.commands.register({
@@ -251,6 +254,27 @@ export class SkillForgeRuntime extends Service {
             },
             this.roots(agent),
           )
+          if (saved.plan.action === 'update') {
+            const evalRuntime = this.ctx.get('harnessEval') as
+              | {
+                  roots(owner: Agent): {
+                    dshHome: string
+                    workspace?: string
+                    bundledTasks: string
+                  }
+                  assertDistillJustified(
+                    roots: { dshHome: string; workspace?: string; bundledTasks: string },
+                    skillRef: string,
+                  ): Promise<unknown>
+                }
+              | undefined
+            if (evalRuntime) {
+              await evalRuntime.assertDistillJustified(
+                evalRuntime.roots(agent),
+                capabilityRef('skill', saved.document.slug),
+              )
+            }
+          }
           const proposal = ctx.proposals.create(agent, {
             kind: 'skill-write',
             title: saved.title,

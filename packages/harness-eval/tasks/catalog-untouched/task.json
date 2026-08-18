@@ -1,0 +1,17 @@
+{
+  "id": "catalog-untouched",
+  "summary": "The curated catalog file is readable and hashed, never written.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-catalog-readonly"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "assertions": [
+    {
+      "id": "catalog-hashed",
+      "skill": "assert-catalog-readonly",
+      "kind": "catalog-untouched"
+    }
+  ],
+  "timeout_ms": 30000
+}

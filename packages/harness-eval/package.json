@@ -1,0 +1,16 @@
+{
+  "name": "@oh-my-dsh/harness-eval",
+  "version": "0.1.0",
+  "description": "Agent-facing eval_control: filesystem artifacts plus causal with/without scoring. Does not apply proposals.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "eval",
+    "oh-my-dsh"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

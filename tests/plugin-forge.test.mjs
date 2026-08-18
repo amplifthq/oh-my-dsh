@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 
+import { parseOrganIndex } from '../dist/packages/plugin-control/src/catalog.js'
 import {
   contentAddressedFilename,
   checkModuleSyntax,
@@ -14,6 +15,15 @@ import {
   SOURCE_MAX_BYTES,
   validateForgedPluginInput,
 } from '../dist/packages/plugin-forge/src/document.js'
+import {
+  CATALOG_PLACEHOLDERS,
+  mergeAttributedTools,
+  planCapabilityGap,
+  shouldRecordSearchMiss,
+  toolsFromEffectLabels,
+  toolsFromSource,
+} from '../dist/packages/plugin-forge/src/evidence.js'
+import { readCapabilityGaps, readRevisionLog } from '../dist/packages/plugin-forge/src/journal.js'
 import {
   commitForgedPluginWrite,
   ensureImportResolution,
@@ -29,6 +39,20 @@ import {
   verifyForgedState,
 } from '../dist/packages/plugin-forge/src/index.js'
 import { ProposalStore } from '../dist/packages/proposals/src/index.js'
+import { capabilityRef } from '../dist/packages/capability-discovery/src/catalog.js'
+import { HarnessEvalRuntime, bundledTasksDir } from '../dist/packages/harness-eval/src/index.js'
+import {
+  compareScores,
+  conditionDigest,
+  evalCanonical,
+  evalSha256Hex,
+} from '../dist/packages/harness-eval/src/contract.js'
+import {
+  bundledSuiteDigest,
+  writeCompare,
+  writeRun,
+  writeSnapshot,
+} from '../dist/packages/harness-eval/src/store.js'
 
 const ECHO_SOURCE = `export const name = 'forged-echo'
 export const provide = ['forgedEcho']
@@ -245,7 +269,7 @@ test('identical re-forge is rejected and revisions replace the old source file',
   assert.equal(state.meta.revision, 2)
   assert.equal(state.digestMatches, true)
   const files = await readdir(target.directory)
-  assert.deepEqual(files.sort(), ['plugin.json', plan.sourceFile].sort())
+  assert.deepEqual(files.sort(), ['plugin.json', 'revisions.jsonl', plan.sourceFile].sort())
 })
 
 test('the stale-metadata guard rejects appeared, disappeared, and changed states', async () => {
@@ -349,6 +373,12 @@ function forgeHarness() {
     register(definition) {
       registeredTools.set(definition.name, definition)
       return () => registeredTools.delete(definition.name)
+    },
+    schemas() {
+      return [...registeredTools.values()].map((definition) => ({
+        name: definition.name,
+        description: definition.description ?? '',
+      }))
     },
   })
   ctx.provide('commands', {
@@ -661,6 +691,302 @@ test('agent end disposes mounted forged plugins through the owner cleanup', asyn
     assert.equal(harness.ctx.get('forgedEcho').value, 'active')
     await fiber.dispose()
     assert.equal(harness.ctx.get('forgedEcho'), undefined)
+  } finally {
+    restore()
+  }
+})
+
+test('effect labels and mount-time tool names attribute invocations', () => {
+  assert.deepEqual(toolsFromEffectLabels(['ctx.provide("forgedEcho")']), [])
+  assert.deepEqual(toolsFromEffectLabels(['ctx.tools.register("forged_echo")']), ['forged_echo'])
+  assert.deepEqual(toolsFromSource(TOOLSMITH_SOURCE), ['forged_echo'])
+  assert.deepEqual(toolsFromSource(ECHO_SOURCE), [])
+  assert.deepEqual(mergeAttributedTools(['ctx.provide("x")'], ['forged_echo', 'forged_echo']), [
+    'forged_echo',
+  ])
+})
+
+test('capability-search misses are authoritative only when the catalog was complete', () => {
+  assert.equal(shouldRecordSearchMiss({ hitCount: 1, skillsComplete: true }), false)
+  assert.equal(shouldRecordSearchMiss({ hitCount: 0, skillsComplete: false }), false)
+  assert.equal(shouldRecordSearchMiss({ hitCount: 0, skillsComplete: true }), true)
+  assert.equal(
+    shouldRecordSearchMiss({ hitCount: 0, skillsComplete: false, kinds: ['plugin'] }),
+    true,
+  )
+  const redacted = planCapabilityGap({
+    query: 'sk-abcdefghijklmnopqrstuvwxyz012345',
+    hitCount: 0,
+    skillsComplete: true,
+  })
+  assert.equal(redacted.redacted, true)
+  assert.match(redacted.query, /redacted sha256=/)
+})
+
+test('successful forge writes a revision log', async () => {
+  const roots = await freshRoots()
+  const target = resolveForgedPluginTarget('user', 'forged-echo', roots)
+  await commitForgedPluginWrite(
+    target,
+    planForgedPluginWrite(validateForgedPluginInput(input()), 'user'),
+  )
+  const log = await readRevisionLog(target)
+  assert.equal(log.length, 1)
+  assert.equal(log[0].revision, 1)
+  assert.equal(log[0].action, 'create')
+})
+
+test('attributed tool invocations increment durable usage', async () => {
+  const { harness, agent, tool, exec, restore } = await runtimeFixture()
+  try {
+    const prepared = JSON.parse(
+      await tool.execute(
+        {
+          action: 'prepare_forge',
+          scope: 'user',
+          name: 'forged-toolsmith',
+          summary: 'Register an echo tool from forged source.',
+          manifest: { name: 'forged-toolsmith', provide: [], inject: ['tools'] },
+          intended_effects: ['register the forged_echo tool'],
+          source: TOOLSMITH_SOURCE,
+        },
+        exec,
+      ),
+    )
+    const mounted = await harness.proposals.apply(agent, prepared.proposal.id, exec)
+    assert.ok(mounted.details.attributedTools.includes('forged_echo'))
+
+    await harness.ctx.pluginForge.recordInvocation(agent, 'forged_echo')
+    await harness.ctx.pluginForge.recordInvocation(agent, 'forged_echo')
+    const usage = JSON.parse(
+      await tool.execute({ action: 'usage', scope: 'user', name: 'forged-toolsmith' }, exec),
+    )
+    assert.equal(usage.usage.totalInvocations, 2)
+    assert.equal(usage.usage.byTool.forged_echo, 2)
+  } finally {
+    restore()
+  }
+})
+
+test('prepare_promote writes an audit packet and never the curated catalog', async () => {
+  const { harness, agent, tool, exec, roots, restore } = await runtimeFixture()
+  const catalogBefore = await readFile(new URL('../presets/plugins.json', import.meta.url), 'utf8')
+  try {
+    const prepared = JSON.parse(
+      await tool.execute(
+        {
+          action: 'prepare_forge',
+          scope: 'user',
+          name: 'forged-echo',
+          summary: 'Provide a tiny echo service for tests.',
+          manifest: { name: 'forged-echo', provide: ['forgedEcho'], inject: [] },
+          intended_effects: ['provide the forgedEcho service'],
+          source: ECHO_SOURCE,
+        },
+        exec,
+      ),
+    )
+    await harness.proposals.apply(agent, prepared.proposal.id, exec)
+
+    const promote = JSON.parse(
+      await tool.execute({ action: 'prepare_promote', scope: 'user', name: 'forged-echo' }, exec),
+    )
+    assert.equal(promote.proposal.kind, 'plugin-promote')
+    assert.equal(promote.proposal.effects[0].details.writesCatalog, false)
+    assert.match(promote.proposal.effects[0].details.catalogDraft.module, /REPLACE_WITH/)
+    assert.equal(promote.proposal.effects[0].details.source, undefined)
+    assert.equal(promote.proposal.effects[0].details.current.source, ECHO_SOURCE)
+
+    const result = await harness.proposals.apply(agent, promote.proposal.id, exec)
+    assert.match(result.summary, /Catalog was not modified/)
+    const audit = await readFile(join(result.details.written.auditPath), 'utf8')
+    assert.match(audit, /Promotion audit: forged-echo/)
+    assert.match(audit, /never writes presets\/plugins\.json/)
+    const draft = JSON.parse(await readFile(result.details.written.catalogDraftPath, 'utf8'))
+    assert.equal(draft.module, CATALOG_PLACEHOLDERS.module)
+    assert.throws(() => parseOrganIndex(JSON.stringify([draft])), /integrity|semver|HTTPS|package/i)
+
+    const catalogAfter = await readFile(new URL('../presets/plugins.json', import.meta.url), 'utf8')
+    assert.equal(catalogAfter, catalogBefore)
+    assert.equal(
+      await readFile(join(roots.dshHome, 'omd', 'capability-gaps.jsonl')).catch(() => ''),
+      '',
+    )
+  } finally {
+    restore()
+  }
+})
+
+test('prepare_promote requires a non-regressing diff and a faithful ablate when harnessEval is mounted', async () => {
+  const { harness, agent, tool, exec, roots, restore } = await runtimeFixture()
+  const catalogBefore = await readFile(new URL('../presets/plugins.json', import.meta.url), 'utf8')
+  try {
+    await harness.ctx.plugin(HarnessEvalRuntime)
+    const prepared = JSON.parse(
+      await tool.execute(
+        {
+          action: 'prepare_forge',
+          scope: 'user',
+          name: 'forged-echo',
+          summary: 'Provide a tiny echo service for tests.',
+          manifest: { name: 'forged-echo', provide: ['forgedEcho'], inject: [] },
+          intended_effects: ['provide the forgedEcho service'],
+          source: ECHO_SOURCE,
+        },
+        exec,
+      ),
+    )
+    await harness.proposals.apply(agent, prepared.proposal.id, exec)
+    await assert.rejects(
+      tool.execute({ action: 'prepare_promote', scope: 'user', name: 'forged-echo' }, exec),
+      /eval_control compare/,
+    )
+
+    const evalRoots = { ...roots, bundledTasks: bundledTasksDir() }
+    const pluginRef = capabilityRef('plugin', 'forged/user/forged-echo')
+    const digestA = 'a'.repeat(64)
+    const digestB = 'b'.repeat(64)
+    const first = await writeSnapshot(
+      evalRoots,
+      { skills: [], plugins: [{ ref: pluginRef, digest: digestA, revision: 1 }], patch_digest: '' },
+      { files: [{ ref: pluginRef, bytes: Buffer.from(ECHO_SOURCE) }] },
+    )
+    const second = await writeSnapshot(
+      evalRoots,
+      { skills: [], plugins: [{ ref: pluginRef, digest: digestB, revision: 2 }], patch_digest: '' },
+      { files: [{ ref: pluginRef, bytes: Buffer.from(ECHO_SOURCE + '\n// rev2\n') }] },
+    )
+    const suite = await bundledSuiteDigest(evalRoots)
+    const scoreOf = (run_id, snapshot_digest) => ({
+      task_id: 'snapshot-stable',
+      snapshot_digest,
+      condition_digest: conditionDigest(snapshot_digest, null),
+      suite_digest: suite,
+      intervention: null,
+      pass: true,
+      assertions: [{ id: 'digest-stable', pass: true }],
+      tokens: { input: 0, output: 0 },
+      duration_ms: 1,
+    })
+    const baseline = await writeRun(evalRoots, {
+      task_id: 'snapshot-stable',
+      snapshot_digest: first.digest,
+      suite_digest: suite,
+      intervention: null,
+      score: scoreOf('run-base', first.digest),
+      tree: {
+        task_id: 'snapshot-stable',
+        suite_digest: suite,
+        plan: { skills: ['assert-snapshot-stable'], skip: [] },
+        nodes: [],
+      },
+      traces: [],
+      meta: {},
+    })
+    const candidate = await writeRun(evalRoots, {
+      task_id: 'snapshot-stable',
+      snapshot_digest: second.digest,
+      suite_digest: suite,
+      intervention: null,
+      score: scoreOf('run-cand', second.digest),
+      tree: {
+        task_id: 'snapshot-stable',
+        suite_digest: suite,
+        plan: { skills: ['assert-snapshot-stable'], skip: [] },
+        nodes: [],
+      },
+      traces: [],
+      meta: {},
+    })
+    const result = compareScores({
+      mode: 'diff',
+      baseline: { ...scoreOf(baseline.run_id, first.digest), run_id: baseline.run_id },
+      candidate: { ...scoreOf(candidate.run_id, second.digest), run_id: candidate.run_id },
+    })
+    await writeCompare(evalRoots, evalSha256Hex(evalCanonical(result)), result)
+    await assert.rejects(
+      tool.execute({ action: 'prepare_promote', scope: 'user', name: 'forged-echo' }, exec),
+      /mode=ablate/,
+    )
+
+    const intervention = { op: 'ablate', target: pluginRef }
+    const intact = await writeRun(evalRoots, {
+      task_id: 'snapshot-stable',
+      snapshot_digest: first.digest,
+      suite_digest: suite,
+      intervention: null,
+      score: scoreOf('run-intact', first.digest),
+      tree: {
+        task_id: 'snapshot-stable',
+        suite_digest: suite,
+        plan: { skills: ['assert-snapshot-stable'], skip: [] },
+        nodes: [],
+      },
+      traces: [],
+      meta: {},
+    })
+    const ablated = await writeRun(evalRoots, {
+      task_id: 'snapshot-stable',
+      snapshot_digest: first.digest,
+      suite_digest: suite,
+      intervention,
+      score: {
+        ...scoreOf('run-ablate', first.digest),
+        condition_digest: conditionDigest(first.digest, intervention),
+        intervention,
+        pass: false,
+        assertions: [{ id: 'digest-stable', pass: false }],
+      },
+      tree: {
+        task_id: 'snapshot-stable',
+        suite_digest: suite,
+        plan: { skills: ['assert-snapshot-stable'], skip: [] },
+        nodes: [],
+      },
+      traces: [],
+      meta: {},
+    })
+    const ablate = compareScores({
+      mode: 'ablate',
+      baseline: {
+        ...scoreOf(intact.run_id, first.digest),
+        run_id: intact.run_id,
+      },
+      candidate: {
+        ...scoreOf(ablated.run_id, first.digest),
+        run_id: ablated.run_id,
+        condition_digest: conditionDigest(first.digest, intervention),
+        intervention,
+        pass: false,
+        assertions: [{ id: 'digest-stable', pass: false }],
+      },
+      target: pluginRef,
+    })
+    await writeCompare(evalRoots, evalSha256Hex(evalCanonical(ablate)), ablate)
+
+    const promote = JSON.parse(
+      await tool.execute({ action: 'prepare_promote', scope: 'user', name: 'forged-echo' }, exec),
+    )
+    assert.equal(promote.proposal.kind, 'plugin-promote')
+    const catalogAfter = await readFile(new URL('../presets/plugins.json', import.meta.url), 'utf8')
+    assert.equal(catalogAfter, catalogBefore)
+  } finally {
+    restore()
+  }
+})
+
+test('recordSearchMiss appends an authoritative gap journal', async () => {
+  const { harness, restore } = await runtimeFixture()
+  try {
+    await harness.ctx.pluginForge.recordSearchMiss({
+      query: 'pdf ocr table extraction',
+      kinds: ['tool'],
+      hitCount: 0,
+      skillsComplete: true,
+    })
+    const recorded = await readCapabilityGaps(process.env.DSH_HOME)
+    assert.equal(recorded.at(-1).query, 'pdf ocr table extraction')
+    assert.equal(recorded.at(-1).authoritative, true)
   } finally {
     restore()
   }

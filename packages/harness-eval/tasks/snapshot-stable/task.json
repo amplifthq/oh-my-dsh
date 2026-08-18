@@ -1,0 +1,19 @@
+{
+  "id": "snapshot-stable",
+  "summary": "Rehashing a captured snapshot yields the same digest.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-snapshot-stable"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "assertions": [
+    {
+      "id": "digest-stable",
+      "skill": "assert-snapshot-stable",
+      "kind": "digest-equals",
+      "left": "snapshot",
+      "right": "recomputed"
+    }
+  ],
+  "timeout_ms": 30000
+}

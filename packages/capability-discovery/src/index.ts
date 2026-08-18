@@ -2,9 +2,11 @@
  * Unified, read-only capability discovery for oh-my-dsh.
  *
  * Searches model-visible tools, skills, slash commands, inert/active MCP
- * servers, and curated session plugins. Never activates a process, imports a
- * package, expands credentials, or creates a proposal — those remain on
- * mcp_control, plugin_control, and proposal_control.
+ * servers, curated session plugins, and agent-forged plugins (marked `forged`).
+ * Never activates a process, imports a package, expands credentials, or creates
+ * a proposal — those remain on mcp_control, plugin_control, plugin_forge, and
+ * proposal_control. Zero-hit searches are recorded as capability gaps so
+ * plugin forge has a direction; discovery itself stays read-only.
  */
 
 import { Service, type Context } from '@deepseek-ai/cordis'
@@ -17,6 +19,7 @@ import type { McpCatalogView, McpControlRuntime } from '../../mcp-control/src/in
 import type { OrganView, PluginControlRuntime } from '../../plugin-control/src/index.ts'
 import {
   buildCommandCapability,
+  buildForgedPluginCapability,
   buildMcpCapability,
   buildPluginCapability,
   buildSkillCapability,
@@ -28,6 +31,7 @@ import {
   type CapabilitySearchHit,
   type CapabilitySearchOptions,
 } from './catalog.js'
+import { shouldRecordSearchMiss } from '../../plugin-forge/src/evidence.js'
 
 export const name = 'omd-capability-discovery'
 
@@ -68,6 +72,21 @@ export interface CapabilitySources {
   commands: readonly CommandDescriptorLike[]
   mcpServers: readonly McpCatalogView[]
   plugins: readonly OrganView[]
+  forgedPlugins?: readonly ForgedCapabilitySource[]
+}
+
+export interface ForgedCapabilitySource {
+  slug: string
+  scope: 'user' | 'project'
+  summary: string
+  revision: number
+  digest: string
+  digestMatches: boolean
+  active: boolean
+  status: 'ok' | 'invalid'
+  reason?: string
+  risk: string
+  invocations?: number
 }
 
 export interface CapabilitySnapshot {
@@ -136,6 +155,24 @@ export function aggregateCapabilities(sources: CapabilitySources): CapabilitySna
     )
   }
 
+  for (const forged of sources.forgedPlugins ?? []) {
+    capabilities.push(
+      buildForgedPluginCapability({
+        slug: forged.slug,
+        scope: forged.scope,
+        summary: forged.summary,
+        revision: forged.revision,
+        digest: forged.digest,
+        digestMatches: forged.digestMatches,
+        active: forged.active,
+        status: forged.status,
+        reason: forged.reason,
+        risk: forged.risk,
+        invocations: forged.invocations,
+      }),
+    )
+  }
+
   const counts: Record<CapabilityKind, number> = {
     tool: 0,
     skill: 0,
@@ -160,8 +197,9 @@ export function formatCapabilityHits(
   }
   const lines = hits.map((hit) => {
     const risk = hit.risk ? ` risk=${JSON.stringify(hit.risk)}` : ''
+    const forged = hit.forged ? ' forged' : ''
     return (
-      `${hit.ref} [${hit.status}] score=${hit.score} — ${hit.summary}` +
+      `${hit.ref} [${hit.status}${forged}] score=${hit.score} — ${hit.summary}` +
       `\n  next: ${hit.nextAction.instruction}${risk}`
     )
   })
@@ -200,14 +238,17 @@ export class CapabilityDiscoveryRuntime extends Service {
       order: 112,
       text:
         'Before claiming a capability is unavailable, call capability_search. It indexes ' +
-        'active tools, skills, slash commands, inert MCP servers, and curated session plugins. ' +
-        'Discovery is read-only: activating an MCP server or loading a plugin still requires ' +
-        'mcp_control / plugin_control prepare_* plus an approved proposal_control apply.',
+        'active tools, skills, slash commands, inert MCP servers, curated session plugins, ' +
+        'and agent-forged plugins (marked forged). A zero-hit search is recorded as a ' +
+        'capability gap that can steer plugin_forge. Discovery is read-only: activating an ' +
+        'MCP server or loading a plugin still requires mcp_control / plugin_control / ' +
+        'plugin_forge prepare_* plus an approved proposal_control apply.',
     })
 
     ctx.commands.register({
       name: 'omd-capabilities',
-      description: 'Search tools, skills, commands, MCP servers, and curated plugins.',
+      description:
+        'Search tools, skills, commands, MCP servers, curated plugins, and forged plugins.',
       input: { hint: 'search query' },
       recordInput: false,
       handler: async ({ agent, rawInput, signal }) => {
@@ -220,6 +261,7 @@ export class CapabilityDiscoveryRuntime extends Service {
         }
         const snapshot = await this.snapshot(agent as Agent, signal)
         const hits = searchCapabilities(snapshot.capabilities, query)
+        this.recordMiss(query, undefined, hits.length, snapshot.skillsComplete)
         return {
           kind: 'success',
           text: formatCapabilityHits(hits, { skillsComplete: snapshot.skillsComplete }),
@@ -231,7 +273,7 @@ export class CapabilityDiscoveryRuntime extends Service {
       defineTool({
         name: 'capability_search',
         description:
-          'Search the unified capability catalog (tools, skills, commands, MCP servers, curated plugins) or show one stable ref. Read-only: never activates MCP servers or loads plugins.',
+          'Search the unified capability catalog (tools, skills, commands, MCP servers, curated plugins, forged plugins) or show one stable ref. Read-only: never activates MCP servers or loads plugins. Zero-hit searches are recorded as capability gaps.',
         parameters: {
           action: {
             type: 'string',
@@ -279,6 +321,7 @@ export class CapabilityDiscoveryRuntime extends Service {
             limit: typeof args.limit === 'number' ? args.limit : undefined,
           }
           const hits = searchCapabilities(snapshot.capabilities, args.query, options)
+          this.recordMiss(args.query, options.kinds, hits.length, snapshot.skillsComplete)
           return JSON.stringify(
             {
               hits,
@@ -338,8 +381,31 @@ export class CapabilityDiscoveryRuntime extends Service {
 
     const mcpServers = this.ctx.mcpControl.list(agent)
     const plugins = this.ctx.pluginControl.list(agent)
+    const forgedPlugins = (await this.ctx.get('pluginForge')?.listForDiscovery(agent)) ?? []
 
-    return { tools, skills, skillsComplete, commands, mcpServers, plugins }
+    return { tools, skills, skillsComplete, commands, mcpServers, plugins, forgedPlugins }
+  }
+
+  private recordMiss(
+    query: string,
+    kinds: readonly CapabilityKind[] | undefined,
+    hitCount: number,
+    skillsComplete: boolean,
+  ): void {
+    if (
+      !shouldRecordSearchMiss({
+        hitCount,
+        skillsComplete,
+        kinds,
+      })
+    ) {
+      return
+    }
+    const forge = this.ctx.get('pluginForge')
+    if (!forge) return
+    void forge.recordSearchMiss({ query, kinds, hitCount, skillsComplete }).catch((error) => {
+      this.ctx.logger.warn(`oh-my-dsh: could not record capability gap: ${String(error)}`)
+    })
   }
 }
 

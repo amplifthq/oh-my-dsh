@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { Context } from '@deepseek-ai/cordis'
 import {
   detectSecretLikeContent,
   parseSkillMarkdown,
@@ -18,11 +19,26 @@ import {
   skillDigest,
 } from '../dist/packages/skill-forge/src/store.js'
 import {
+  SkillForgeRuntime,
   distillInstruction,
   planSkillSave,
   skillSaveCommit,
 } from '../dist/packages/skill-forge/src/index.js'
 import { ProposalStore } from '../dist/packages/proposals/src/index.js'
+import { capabilityRef } from '../dist/packages/capability-discovery/src/catalog.js'
+import { HarnessEvalRuntime, bundledTasksDir } from '../dist/packages/harness-eval/src/index.js'
+import {
+  compareScores,
+  conditionDigest,
+  evalCanonical,
+  evalSha256Hex,
+} from '../dist/packages/harness-eval/src/contract.js'
+import { writeCapturedSnapshot } from '../dist/packages/harness-eval/src/snapshot.js'
+import {
+  bundledSuiteDigest,
+  writeCompare,
+  writeRun,
+} from '../dist/packages/harness-eval/src/store.js'
 
 const PRESET_SKILLS = [
   'review-changes',
@@ -412,4 +428,162 @@ test('distillInstruction routes focus and mandates the approval gate', () => {
   assert.match(focused, /proposal_control apply/)
   const unfocused = distillInstruction('')
   assert.match(unfocused, /most recently verified procedure/)
+})
+
+function skillHarness() {
+  const ctx = new Context()
+  const registeredTools = new Map()
+  const proposals = new ProposalStore()
+  ctx.provide('tools', {
+    register(definition) {
+      registeredTools.set(definition.name, definition)
+      return () => registeredTools.delete(definition.name)
+    },
+  })
+  ctx.provide('commands', {
+    register() {
+      return () => {}
+    },
+  })
+  ctx.provide('systemPrompt', {
+    section() {
+      return () => {}
+    },
+  })
+  ctx.provide('proposals', {
+    create: (owner, input) => proposals.create(owner, input),
+    list: (owner) => proposals.list(owner),
+    show: (owner, id) => proposals.show(owner, id),
+    discard: (owner, id) => proposals.discard(owner, id),
+    apply: (owner, id, exec) => proposals.apply(owner, id, exec),
+  })
+  return { ctx, registeredTools, proposals }
+}
+
+test('prepare_save create still works when harnessEval is mounted', async () => {
+  const { dshHome, workspace } = await scratchRoots()
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = dshHome
+  const harness = skillHarness()
+  try {
+    await harness.ctx.plugin(SkillForgeRuntime)
+    await harness.ctx.plugin(HarnessEvalRuntime)
+    const agent = { id: 'agent-skill', ctx: harness.ctx, session: { header: { cwd: workspace } } }
+    const tool = harness.registeredTools.get('skill_control')
+    const prepared = JSON.parse(
+      await tool.execute(
+        { action: 'prepare_save', ...saveArgs() },
+        { agent, signal: new AbortController().signal },
+      ),
+    )
+    assert.equal(prepared.proposal.kind, 'skill-write')
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+    await harness.ctx.root.fiber.dispose()
+  }
+})
+
+test('prepare_save update requires a faithful ablate when harnessEval is mounted', async () => {
+  const { dshHome, workspace } = await scratchRoots()
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = dshHome
+  const harness = skillHarness()
+  try {
+    const created = await planSkillSave(saveArgs(), { dshHome, workspace })
+    await commitSkillWrite(created.target, created.plan)
+    await harness.ctx.plugin(SkillForgeRuntime)
+    await harness.ctx.plugin(HarnessEvalRuntime)
+    const agent = { id: 'agent-skill', ctx: harness.ctx, session: { header: { cwd: workspace } } }
+    const tool = harness.registeredTools.get('skill_control')
+    const exec = { agent, signal: new AbortController().signal }
+    await assert.rejects(
+      tool.execute(
+        { action: 'prepare_save', ...saveArgs({ body: '# Release tagging\n\nUpdated.' }) },
+        exec,
+      ),
+      /eval_control compare/,
+    )
+
+    const evalRoots = { dshHome, workspace, bundledTasks: bundledTasksDir() }
+    const skillRef = capabilityRef('skill', 'release-tagging')
+    const captured = await writeCapturedSnapshot(evalRoots, {
+      skills: [{ name: 'release-tagging', bytes: Buffer.from(created.plan.after) }],
+      plugins: [],
+      patchBytes: null,
+    })
+    const suite = await bundledSuiteDigest(evalRoots)
+    const intervention = { op: 'ablate', target: skillRef }
+    const scoreOf = (run_id, snapshot_digest, extra = {}) => ({
+      task_id: 'snapshot-stable',
+      snapshot_digest,
+      condition_digest: conditionDigest(snapshot_digest, extra.intervention ?? null),
+      suite_digest: suite,
+      intervention: extra.intervention ?? null,
+      pass: extra.pass ?? true,
+      assertions: extra.assertions ?? [{ id: 'digest-stable', pass: true }],
+      tokens: { input: 0, output: 0 },
+      duration_ms: 1,
+    })
+    const intact = await writeRun(evalRoots, {
+      task_id: 'snapshot-stable',
+      snapshot_digest: captured.digest,
+      suite_digest: suite,
+      intervention: null,
+      score: scoreOf('run-intact', captured.digest),
+      tree: {
+        task_id: 'snapshot-stable',
+        suite_digest: suite,
+        plan: { skills: ['assert-snapshot-stable'], skip: [] },
+        nodes: [],
+      },
+      traces: [],
+      meta: {},
+    })
+    const ablated = await writeRun(evalRoots, {
+      task_id: 'snapshot-stable',
+      snapshot_digest: captured.digest,
+      suite_digest: suite,
+      intervention,
+      score: scoreOf('run-ablate', captured.digest, {
+        intervention,
+        pass: false,
+        assertions: [{ id: 'digest-stable', pass: false }],
+      }),
+      tree: {
+        task_id: 'snapshot-stable',
+        suite_digest: suite,
+        plan: { skills: ['assert-snapshot-stable'], skip: [] },
+        nodes: [],
+      },
+      traces: [],
+      meta: {},
+    })
+    const ablate = compareScores({
+      mode: 'ablate',
+      baseline: { ...scoreOf(intact.run_id, captured.digest), run_id: intact.run_id },
+      candidate: {
+        ...scoreOf(ablated.run_id, captured.digest, {
+          intervention,
+          pass: false,
+          assertions: [{ id: 'digest-stable', pass: false }],
+        }),
+        run_id: ablated.run_id,
+      },
+      target: skillRef,
+    })
+    await writeCompare(evalRoots, evalSha256Hex(evalCanonical(ablate)), ablate)
+
+    const updated = JSON.parse(
+      await tool.execute(
+        { action: 'prepare_save', ...saveArgs({ body: '# Release tagging\n\nUpdated.' }) },
+        exec,
+      ),
+    )
+    assert.equal(updated.proposal.kind, 'skill-write')
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+    await harness.ctx.root.fiber.dispose()
+  }
 })

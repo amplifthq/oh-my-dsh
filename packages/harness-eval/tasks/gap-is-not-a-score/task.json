@@ -1,0 +1,18 @@
+{
+  "id": "gap-is-not-a-score",
+  "summary": "A search miss is not a passing score.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-gap-shape"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "assertions": [
+    {
+      "id": "search-miss",
+      "skill": "assert-gap-shape",
+      "kind": "search-misses",
+      "query": "zxqy-nonexistent-capability-token"
+    }
+  ],
+  "timeout_ms": 30000
+}

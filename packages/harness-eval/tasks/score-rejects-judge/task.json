@@ -1,0 +1,20 @@
+{
+  "id": "score-rejects-judge",
+  "summary": "A planted score with a judge field is rejected by the scorer.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-scorer"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "fixture": "fixture",
+  "assertions": [
+    {
+      "id": "judge-rejected",
+      "skill": "assert-scorer",
+      "kind": "command-exit",
+      "argv": ["node", "verify.mjs"],
+      "expect_status": 0
+    }
+  ],
+  "timeout_ms": 30000
+}

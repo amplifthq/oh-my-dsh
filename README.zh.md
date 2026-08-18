@@ -217,13 +217,23 @@ omd trust add .
 
 ### 插件锻造
 
-`plugin_forge` 是 skill forge 在能力轴上的对应物：Agent 可以为自己编写一个小型 dsh 插件（比如缺失的工具），把**完整源码**装进审批门控的 proposal。在你批准 `proposal_control apply` 之前不写盘、不挂载；批准后源码持久化到 `$DSH_HOME/forged-plugins/<slug>/`（scope `user`）或 `<workspace>/.dsh/forged-plugins/<slug>/`（scope `project`），校验你审查过的 SHA-256 摘要，再经与精选插件库相同的控制器挂载。卸载走 Cordis effects 逆序撤销；`prepare_load` 可在之后的会话里按同一摘要重新挂载已锻造的版本；`/omd-forged` 列出锻造插件的版本、摘要和 session 状态。
+`plugin_forge` 是 skill forge 在能力轴上的对应物：Agent 可以为自己编写一个小型 dsh 插件（比如缺失的工具），把**完整源码**装进审批门控的 proposal。在你批准 `proposal_control apply` 之前不写盘、不挂载；批准后源码持久化到 `$DSH_HOME/forged-plugins/<slug>/`（scope `user`）或 `<workspace>/.dsh/forged-plugins/<slug>/`（scope `project`），校验你审查过的 SHA-256 摘要，再经与精选插件库相同的控制器挂载。卸载走 Cordis effects 逆序撤销；`prepare_load` 可在之后的会话里按同一摘要重新挂载已锻造的版本；`/omd-forged` 列出锻造插件的版本、摘要、session 状态和已归属的调用次数。
+
+选择压是记下来的，不是猜的：挂载之后，工具调用按 Cordis effect 标签（以及这次挂载里 `schemas()` 新出现的工具）归属到对应插件，并追加到该插件的 usage 日志。`capability_search` 会标出 `forged` 锻造插件；零命中搜索记入 `$DSH_HOME/omd/capability-gaps.jsonl`，给后续锻造、修订、退役一个方向。`/omd-gaps` 和 `plugin_forge gaps` 列出这些缺口。`plugin_forge prepare_promote` 组装一份给人审的 PR 草稿——当前源码、digest 历史、用量、缺口，以及满是 `REPLACE_WITH_*` 占位符的目录条目——写到该插件的 `promotions/` 目录。当 `eval_control` 已挂载时，晋升还要求一条不 regress 的 `compare mode=diff`，以及一条 faithful 的 `compare mode=ablate`。运行时**绝不**写 [`presets/plugins.json`](presets/plugins.json)。会话产物晋升进精选目录，仍然是一条 pull request。
 
 静态纪律在 proposal 创建之前强制执行：只接受合法 ESM（V8 经 `node --check` 解析，不执行任何代码）；静态 import 仅允许 `@deepseek-ai/cordis` 和 `@deepseek-ai/dsh-tools`；禁止动态 `import()` 和 `require`；源码 ≤ 32 KiB；必须导出 `name` 和 `apply`，挂载时与声明的 manifest 再次核对。import 白名单是为了审查清晰度，不是沙箱：进程内 JavaScript 无法被限制，注册工具的 execute 体仍能触及 `globalThis`、`fetch` 和 `process`。白名单保证每个模块依赖在审查时可见，但不限制运行时能力。锻造插件以 harness 的完整权限运行，而且这段代码是 Agent 在本次会话中写的——proposal 审查就是全部的信任决策，因此 proposal 携带完整源码、提取出的 import 清单、声明的预期 effects 和疑似密钥告警；commit 结果会把实际观测到的 Cordis effect 标签与声明并列展示。
 
 ### 能力发现平面
 
-`capability_search` 是只读搜索入口，覆盖五类能力：模型可见 tools、skills、斜杠命令、惰性/已激活 MCP server，以及精选 session 插件。稳定引用形如 `tool:bash`、`mcp:omd-playwright`、`plugin:dsh-skill-badge`。每条结果带状态、摘要、来源，以及精确下一步：直接调用 tool、加载 skill、执行 `/command`，或走 `mcp_control` / `plugin_control` 的 prepare 动作。发现平面从不启动 MCP 进程、从不 import 包、从不展开凭据、也从不创建 proposal。人类侧对应命令是 `/omd-capabilities [查询]`。
+`capability_search` 是只读搜索入口，覆盖 tools、skills、斜杠命令、惰性/已激活 MCP server、精选 session 插件，以及 Agent 锻造插件。稳定引用形如 `tool:bash`、`mcp:omd-playwright`、`plugin:dsh-skill-badge`、`plugin:forged/user/<slug>`。锻造结果带 `forged` 标记，下一步走 `plugin_forge` 而不是 `plugin_control`。每条结果带状态、摘要、来源和精确下一步。发现平面从不启动 MCP 进程、从不 import 包、从不展开凭据、也从不创建 proposal。零命中搜索会记为能力缺口。人类侧对应命令是 `/omd-capabilities [查询]`。
+
+### 评测工作流
+
+`eval_control` 用机器断言给冻结的 harness 快照打分。四个动作：`snapshot`、`run`、`compare`、`show`。`run` 必须带明确的 `snapshot_digest`，从不推断当前会话。产物在 `$DSH_HOME/omd/eval`；`show`（可选 `query`）是文件系统通道，没有叙述性摘要。`compare mode=diff` 是晋升门禁；`compare mode=ablate` 是对单个 skill/plugin 的有无对照。eval 已挂载时，`plugin_forge prepare_promote` 要同时有不 regress 的 diff 和 faithful 的 ablate；用 `skill_control prepare_save` **更新**已有 skill 也要一条 faithful ablate（首次写入仍是提案）。分数不读助手文本、LLM judge 或自评。Eval 不 apply proposal、不写目录、不挂载插件。`/omd-eval` 列出打包任务和最近 runs。这是环境。
+
+### 优化器（只提议，不落地）
+
+`opt_control` 在锁定动作集上做持久化 bandit：`prepare_promote`、`prepare_forge`、`prepare_unload`、`prepare_save`、`noop`。策略文件在 `$DSH_HOME/omd/opt/policy.json`。两个动作：`suggest`、`show`。`suggest` 用新的 `eval_control compare` 给上次提议记账，只观察已经过 eval 门禁的候选，然后返回一个臂和下一步工具调用。它从不 apply proposal、不编造插件源码或 skill 正文、也不写 [`presets/plugins.json`](presets/plugins.json)。`/omd-opt` 读策略。选择和保留仍然是 `proposal_control apply`。
 
 ### 上游不会优先做的日用工具
 

@@ -1,0 +1,13 @@
+{
+  "task_id": "wordcount",
+  "run_id": "run-judge",
+  "snapshot_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "condition_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "suite_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "intervention": null,
+  "pass": true,
+  "assertions": [{ "id": "files-exist", "pass": true }],
+  "tokens": { "input": 0, "output": 0 },
+  "duration_ms": 1,
+  "judge": "looks good"
+}

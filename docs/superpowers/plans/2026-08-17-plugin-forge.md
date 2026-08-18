@@ -139,7 +139,7 @@
 
 ---
 
-## Later phases (out of scope for this plan)
+## Later phases
 
-- **Phase 2 — selection pressure:** per-plugin usage counters (tool invocations attributed via effect labels), forged plugins surfaced in `capability_search` with a `forged` marker, and a capability-gap log (recorded `capability_search` misses) that gives forging a direction. These generate the evidence for what to forge, revise, or retire.
-- **Phase 3 — promotion path:** `plugin_forge prepare_promote` assembles an audit packet (source, digest history, manifest, usage stats, revision log) as a human-reviewed pull request draft against `presets/plugins.json` / a real package — the bridge from session artifact to curated catalog entry. Runtime never writes the catalog.
+- [x] **Phase 2 — selection pressure:** per-plugin usage counters (tool invocations attributed via effect labels and mount-time schema diffs), forged plugins surfaced in `capability_search` with a `forged` marker, and a capability-gap log (recorded `capability_search` misses) that gives forging a direction.
+- [x] **Phase 3 — promotion path:** `plugin_forge prepare_promote` assembles an audit packet (source, digest history, manifest, usage stats, revision log) as a human-reviewed pull request draft against `presets/plugins.json` / a real package. Runtime never writes the catalog.

@@ -1,0 +1,22 @@
+{
+  "id": "forged-tool-invocable",
+  "summary": "A forged plugin tool runs after mount and fails when ablated.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-tool-invocable"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "fixture": "fixture",
+  "assertions": [
+    {
+      "id": "tool-invocable",
+      "skill": "assert-tool-invocable",
+      "kind": "tool-execute",
+      "tool": "forged_echo",
+      "plugin": "plugin:forged/user/eval-echo",
+      "args": { "message": "ping" },
+      "expect": "ping"
+    }
+  ],
+  "timeout_ms": 30000
+}

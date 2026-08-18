@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-dsh/capability-discovery",
   "version": "0.1.0",
-  "description": "Unified, read-only search across tools, skills, commands, MCP servers, and curated session plugins.",
+  "description": "Unified, read-only search across tools, skills, commands, MCP servers, curated session plugins, and forged plugins.",
   "type": "module",
   "license": "MIT",
   "keywords": [

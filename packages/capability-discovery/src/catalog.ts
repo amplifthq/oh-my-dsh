@@ -32,6 +32,8 @@ export interface CapabilityDescriptor {
   provenance?: string
   risk?: string
   availability?: string
+  /** Survives search-hit compaction so forged plugins stay marked. */
+  forged?: boolean
   nextAction: CapabilityNextAction
   /** Extra searchable tokens (cached MCP tool names, whenToUse, etc.). */
   keywords?: string[]
@@ -456,6 +458,71 @@ export function buildPluginCapability(input: {
               'Use plugin_control prepare_load, then proposal_control apply with user approval. Discovery never imports the package.',
             tool: 'plugin_control',
             args: { action: 'prepare_load', plugin_id: input.id },
+          }
+        : unavailableAction,
+  }
+}
+
+export function buildForgedPluginCapability(input: {
+  slug: string
+  scope: 'user' | 'project'
+  summary: string
+  revision: number
+  digest: string
+  digestMatches: boolean
+  active: boolean
+  status: 'ok' | 'invalid'
+  reason?: string
+  risk: string
+  invocations?: number
+}): CapabilityDescriptor {
+  const id = `forged/${input.scope}/${input.slug}`
+  const usable = input.status === 'ok' && input.digestMatches
+  const unavailableAction: CapabilityNextAction = {
+    kind: 'unavailable',
+    instruction:
+      input.status === 'invalid'
+        ? `Forged plugin "${input.slug}" is invalid (${input.reason ?? 'unknown'}). ` +
+          'Revise it with plugin_forge prepare_forge; discovery never mounts it.'
+        : `Forged plugin "${input.slug}" source does not match its stored digest. ` +
+          'Forge a fresh revision instead of loading it.',
+  }
+  return {
+    ref: capabilityRef('plugin', id),
+    kind: 'plugin',
+    id,
+    title: bounded(input.slug, MAX_PROVENANCE_CHARS),
+    summary: bounded(input.summary, MAX_SUMMARY_CHARS),
+    status: input.active ? 'active' : usable ? 'inactive' : 'unavailable',
+    provenance: bounded(`forged:${input.scope}`, MAX_PROVENANCE_CHARS),
+    risk: bounded(input.risk, MAX_RISK_CHARS),
+    availability: usable ? 'available' : input.status,
+    forged: true,
+    keywords: ['forged', 'plugin-forge', input.slug, input.scope],
+    details: {
+      forged: true,
+      scope: input.scope,
+      slug: input.slug,
+      revision: input.revision,
+      digest: input.digest,
+      digestMatches: input.digestMatches,
+      invocations: input.invocations ?? 0,
+    },
+    nextAction: input.active
+      ? {
+          kind: 'unload',
+          instruction:
+            'Use plugin_forge prepare_unload, then proposal_control apply with user approval.',
+          tool: 'plugin_forge',
+          args: { action: 'prepare_unload', name: input.slug },
+        }
+      : usable
+        ? {
+            kind: 'load',
+            instruction:
+              'Use plugin_forge prepare_load, then proposal_control apply with user approval. Discovery never imports the source.',
+            tool: 'plugin_forge',
+            args: { action: 'prepare_load', scope: input.scope, name: input.slug },
           }
         : unavailableAction,
   }

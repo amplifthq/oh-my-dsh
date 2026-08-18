@@ -36,7 +36,7 @@ A plugin is eligible only when all of the following are true:
 
 The initial design considered `dsh-attachment`, `dsh-timeout`, and `dsh-code-runtime`. They were not admitted: attachment is already backed by `dsh-attachment-local` in the base bundle, timeout is a utility library rather than a Cordis plugin, and code-runtime is an abstract service seam rather than a concrete plugin.
 
-Forged plugins (`plugin_forge`) are session artifacts, not catalog entries: they live under the forged-plugin roots, are identified by source digest instead of a package pin, and never appear in `presets/plugins.json`. Promoting a forged plugin into this catalog is a phase-3 human process — a pull request with the full source, digest history, and review evidence — and the runtime never writes the catalog.
+Forged plugins (`plugin_forge`) are session artifacts, not catalog entries: they live under the forged-plugin roots, are identified by source digest instead of a package pin, and never appear in `presets/plugins.json`. `plugin_forge prepare_promote` writes a human-reviewed audit packet (source, digest history, usage, capability-search misses, and a catalog draft whose provenance fields are `REPLACE_WITH_*` placeholders) under the plugin's `promotions/` directory. `eval_control` can require a non-regressing `compare mode=diff` and a faithful `compare mode=ablate` before that packet is prepared; `opt_control suggest` may point at `prepare_promote` but still never writes this catalog or applies the proposal. Eval itself never writes this catalog or admits an entry. Promoting a forged plugin is a pull request that supplies the checklist evidence below; a correctly assembled packet is not admission.
 
 ## 2026-08-17 community review batch
 
@@ -56,4 +56,4 @@ One package was admitted; the following candidates were rejected rather than add
 
 ### Phase 3: community submissions
 
-Community entries require a pull request that supplies the checklist evidence, package provenance, automated import-safety checks where practical, and a maintainer review. Signing or attestations may strengthen provenance, but they do not replace source review: a correctly signed in-process plugin can still be unsafe.
+Community entries require a pull request that supplies the checklist evidence, package provenance, automated import-safety checks where practical, and a maintainer review. A `plugin_forge prepare_promote` packet is supporting evidence for that pull request, not a substitute: placeholders must be replaced with a published package, exact semver, npm integrity, and HTTPS repository before a catalog row is valid. Signing or attestations may strengthen provenance, but they do not replace source review: a correctly signed in-process plugin can still be unsafe.

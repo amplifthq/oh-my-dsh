@@ -27,6 +27,8 @@ import {
   type ForgedPluginDocument,
   type ForgedPluginManifest,
 } from './document.js'
+import { appendRevisionLog } from './journal.js'
+import { revisionRecordFromMeta } from './evidence.js'
 
 export type ForgedPluginScope = 'user' | 'project'
 
@@ -374,6 +376,7 @@ export async function commitForgedPluginWrite(
   if (previousSourceFile && previousSourceFile !== plan.sourceFile) {
     await unlink(join(target.directory, previousSourceFile)).catch(() => {})
   }
+  await appendRevisionLog(target, revisionRecordFromMeta(plan.meta, plan.action))
 }
 
 export async function listForgedPlugins(roots: ForgeRoots): Promise<ForgedPluginSummary[]> {

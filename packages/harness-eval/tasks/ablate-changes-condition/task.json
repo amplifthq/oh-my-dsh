@@ -1,0 +1,19 @@
+{
+  "id": "ablate-changes-condition",
+  "summary": "Ablating a skill or plugin changes condition_digest.",
+  "suite": "omd-eval-v1",
+  "plan": {
+    "skills": ["assert-condition"],
+    "skip": [{ "id": "assert-live-headless", "reason": "live runner off" }]
+  },
+  "assertions": [
+    {
+      "id": "condition-is-snapshot-when-intact",
+      "skill": "assert-condition",
+      "kind": "digest-equals",
+      "left": "condition",
+      "right": "snapshot"
+    }
+  ],
+  "timeout_ms": 30000
+}

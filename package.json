@@ -33,6 +33,8 @@
     "./plugin-control": "./dist/packages/plugin-control/src/index.js",
     "./plugin-forge": "./dist/packages/plugin-forge/src/index.js",
     "./capability-discovery": "./dist/packages/capability-discovery/src/index.js",
+    "./harness-eval": "./dist/packages/harness-eval/src/index.js",
+    "./harness-opt": "./dist/packages/harness-opt/src/index.js",
     "./refactor": "./dist/packages/refactor/src/index.js",
     "./web-guard": "./dist/packages/web-guard/src/index.js",
     "./workspace": "./dist/packages/workspace/src/index.js",
@@ -44,6 +46,7 @@
     "bundles",
     "dist",
     "presets",
+    "packages/harness-eval/tasks",
     "README.md",
     "README.zh.md",
     "LICENSE"

@@ -251,6 +251,17 @@ console.log('=== [3/4] Forged tool rides the real registry; /omd-forged; unload 
     !isError && parsed.words === 6 && parsed.characters === 31,
     isError ? text : text,
   )
+  const { text: usageText, isError: usageError } = await callTool('plugin_forge', {
+    action: 'usage',
+    scope: 'user',
+    name: SLUG,
+  })
+  const usage = usageError ? undefined : JSON.parse(usageText)
+  record(
+    'Real tools/result attributes the invocation to the forged plugin',
+    !usageError && usage.usage.totalInvocations >= 1 && usage.usage.byTool.forged_wordcount >= 1,
+    usageError ? usageText : JSON.stringify(usage.usage.byTool),
+  )
 }
 
 {
@@ -322,6 +333,35 @@ console.log('=== [4/4] New-session remount under the digest pin + adversarial so
     'Remounted forged tool executes again through the real pipeline',
     !echoError && JSON.parse(echoText).words === 1,
     echoText,
+  )
+}
+
+{
+  const { text, isError } = await callTool('plugin_forge', {
+    action: 'prepare_promote',
+    scope: 'user',
+    name: SLUG,
+  })
+  const parsed = isError ? undefined : JSON.parse(text)
+  record(
+    'prepare_promote stages a catalog draft without writing the catalog',
+    !isError &&
+      parsed.proposal.kind === 'plugin-promote' &&
+      parsed.proposal.effects[0].details.writesCatalog === false,
+    isError ? text : parsed.proposal.title,
+  )
+  approvalScript.push('allowed-once')
+  const { text: applyText, isError: applyError } = await callTool('proposal_control', {
+    action: 'apply',
+    proposal_id: parsed.proposal.id,
+  })
+  const applied = applyError ? undefined : JSON.parse(applyText)
+  record(
+    'Approved promote writes AUDIT.md and leaves presets/plugins.json untouched',
+    !applyError &&
+      /Catalog was not modified/.test(applied.result.summary) &&
+      existsSync(applied.result.details.written.auditPath),
+    applyError ? applyText : applied.result.details.written.directory,
   )
 }
 

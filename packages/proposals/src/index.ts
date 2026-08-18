@@ -22,6 +22,7 @@ export type ProposalKind =
   | 'plugin-load'
   | 'plugin-unload'
   | 'plugin-forge'
+  | 'plugin-promote'
 
 export interface ProposalEffect {
   type: string
