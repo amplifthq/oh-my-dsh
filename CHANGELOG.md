@@ -8,7 +8,7 @@ land in minor versions, never silently in patches).
 Upstream compatibility for each release is listed in the
 [README compatibility table](README.md#compatibility).
 
-## [0.2.0] - Unreleased
+## [0.1.7] - 2026-08-18
 
 ### Added
 
@@ -43,8 +43,7 @@ Upstream compatibility for each release is listed in the
 - Upstream compatibility: upgraded all `@deepseek-ai/dsh*` dependencies to
   `0.1.0-rc.7`, and updated `@deepseek-ai/dsh-skill-badge` in the curated
   catalog to `0.1.0-rc.7` with its reviewed npm integrity hash.
-- README quick start now leads with npm until portable artifacts ship, and
-  documents the evergreen portable installer at
+- README quick start leads with the portable installer at
   `releases/latest/download/install.sh`. Pins use `OMD_VERSION` instead of a
   versioned raw git URL. Capability tiers (Core, Bundled Optional, Curated
   Integrations, User Growth) are documented explicitly.
@@ -53,10 +52,6 @@ Upstream compatibility for each release is listed in the
   The same evidence is copied into the load proposal for approval.
 - Portable `omd setup` symlinks profile `node_modules` to the immutable
   closure instead of calling npm. npm-mode setup behavior is unchanged.
-
-## [0.1.7] - Unreleased
-
-_Superseded by 0.2.0._
 
 ## [0.1.6] - 2026-08-17
 

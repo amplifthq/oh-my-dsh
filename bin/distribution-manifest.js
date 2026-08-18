@@ -8,7 +8,7 @@ export function normalizePlatform(os = process.platform, arch = process.arch) {
   const tuple = `${os}-${arch}`
   if (!SUPPORTED_PLATFORMS.includes(tuple)) {
     throw new Error(
-      `unsupported platform: ${tuple}. 0.2.0 supports: ${SUPPORTED_PLATFORMS.join(', ')}`,
+      `unsupported platform: ${tuple}. supported platforms: ${SUPPORTED_PLATFORMS.join(', ')}`,
     )
   }
   return tuple

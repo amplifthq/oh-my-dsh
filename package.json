@@ -1,6 +1,6 @@
 {
   "name": "oh-my-dsh",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Plugins, sensible defaults, and a launcher for DeepSeek Harness (dsh) — everything you're missing, without forking upstream.",
   "private": false,
   "type": "module",
