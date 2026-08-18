@@ -27,7 +27,7 @@ It is a native curated distribution, not a fork. You keep upstream's “everythi
 
 ## Quick start
 
-Portable releases ship a self-contained Node.js runtime and production dependency closure for **macOS arm64** and **Linux x64 (glibc)**. No system Node.js, npm, pnpm, or root access is required. CI covers Linux and macOS on Node 22 and 24; Windows is not yet tested — use WSL2.
+Portable releases ship a self-contained Node.js runtime and production dependency closure for **macOS arm64** and **Linux x64 (glibc)**. No system Node.js, npm, pnpm, or root access is required. CI covers Linux and macOS on Node 22 and 24. Native Windows is not supported; use [WSL2](#windows-wsl2).
 
 ### Portable install (recommended)
 
@@ -78,6 +78,22 @@ Prefer not to install globally?
 npx oh-my-dsh@latest setup
 npx oh-my-dsh@latest
 ```
+
+### Windows (WSL2)
+
+There is no native Windows portable archive, installer, or CI job. Do not run `install.sh` from PowerShell or `cmd.exe`. Use WSL2 with a glibc distro (Ubuntu is the tested shape) and run the **linux-x64** portable installer inside that Linux environment.
+
+In an elevated PowerShell:
+
+```powershell
+wsl --install
+```
+
+Reboot if Windows asks, then open the Ubuntu terminal and use the same commands as [Portable install](#portable-install-recommended). The installer detects `Linux-x86_64` and pulls `oh-my-dsh-*-linux-x64.tar.gz`.
+
+Keep the project under the Linux filesystem (`~/...`). Paths under `/mnt/c/` are slower and can break symlink-based profile `node_modules`. Open the Web UI from the `localhost` URL printed inside WSL; Windows 11 can usually reach that loopback address from a host browser. `omd update`, `omd rollback`, and `omd doctor --verify` also run inside WSL.
+
+npm on native Windows is untested. If you try it, you still need Node.js `^22.19.0` or `>=24.0.0` on the Windows side, and it is not a substitute for the portable channel.
 
 Both channels share the same OMD version and Cordis composition. A release is incomplete until npm and every required portable artifact have passed their checks.
 

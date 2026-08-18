@@ -8,6 +8,27 @@ land in minor versions, never silently in patches).
 Upstream compatibility for each release is listed in the
 [README compatibility table](README.md#compatibility).
 
+## [Unreleased]
+
+### Fixed
+
+- Portable `omd` no longer treats a leftover npm/source profile as ready.
+  `dsh-scope` tags standing mounts with a per-module `Symbol`, so a mixed
+  rc.6/rc.7 graph makes the standard preset's `dsh-persona` land on the
+  global prompt layer and fail session resume with
+  `deployment:persona is already registered`. Launch and `omd doctor` now
+  detect a stale profile tree and relink it to the current portable
+  closure.
+- Session resume no longer reads `mcpControl` through the agent scope.
+  Discovery now uses the host plugin context that declared the inject, so
+  resume does not fail with `cannot get property "mcpControl" without inject`.
+
+### Changed
+
+- README documents Windows as WSL2-only: install the linux-x64 portable
+  distribution inside Ubuntu, keep projects on the Linux filesystem, and do
+  not run `install.sh` from PowerShell or `cmd.exe`.
+
 ## [0.1.7] - 2026-08-18
 
 ### Added

@@ -27,7 +27,7 @@ DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。
 
 ## 快速开始
 
-便携版发行包自带 Node.js 运行时和生产依赖闭包，支持 **macOS arm64** 和 **Linux x64（glibc）**。无需系统 Node.js、npm、pnpm 或 root 权限。CI 覆盖 Linux 与 macOS（Node 22、24）；Windows 尚未测试，请使用 WSL2。
+便携版发行包自带 Node.js 运行时和生产依赖闭包，支持 **macOS arm64** 和 **Linux x64（glibc）**。无需系统 Node.js、npm、pnpm 或 root 权限。CI 覆盖 Linux 与 macOS（Node 22、24）。原生 Windows 不受支持，请使用 [WSL2](#windows-wsl2)。
 
 ### 便携版安装（推荐）
 
@@ -78,6 +78,22 @@ omd
 npx oh-my-dsh@latest setup
 npx oh-my-dsh@latest
 ```
+
+### Windows（WSL2）
+
+没有原生 Windows 便携归档、安装器或 CI 任务。不要在 PowerShell 或 `cmd.exe` 里运行 `install.sh`。请使用带 glibc 的 WSL2 发行版（推荐 Ubuntu），在 Linux 环境里安装 **linux-x64** 便携包。
+
+在提升权限的 PowerShell 中：
+
+```powershell
+wsl --install
+```
+
+如系统要求则重启，然后打开 Ubuntu 终端，按[便携版安装](#便携版安装推荐)的命令执行。安装器会识别 `Linux-x86_64` 并下载 `oh-my-dsh-*-linux-x64.tar.gz`。
+
+项目请放在 Linux 文件系统（`~/...`）。`/mnt/c/` 更慢，而且可能破坏 profile 里基于符号链接的 `node_modules`。Web UI 使用 WSL 里打印的 `localhost` 地址；Windows 11 通常可以从宿主浏览器打开该回环地址。`omd update`、`omd rollback` 和 `omd doctor --verify` 也都在 WSL 内运行。
+
+原生 Windows 上的 npm 安装尚未测试。若要尝试，仍需本机 Node.js `^22.19.0` 或 `>=24.0.0`，且不能代替便携渠道。
 
 两个渠道共享同一 OMD 版本和 Cordis 组合。只有 npm 和所有必需的便携版 artifact 都通过检查，release 才算完整。
 

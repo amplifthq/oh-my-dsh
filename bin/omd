@@ -43,6 +43,11 @@ import {
   rollbackToPreviousVersion,
 } from './distribution-state.js'
 import { profilePackageSpec } from './package-spec.js'
+import {
+  describePortableProfileState,
+  portableProfileReady,
+  portableProfileState,
+} from './portable-profile.js'
 
 const require = createRequire(import.meta.url)
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -271,15 +276,32 @@ function setup() {
   console.log(`omd: profiles installed under ${join(dshHome, 'profiles')}`)
 }
 
+function profileRuntimeState(name) {
+  const mode = distributionContext()
+  const profileDir = join(dshHome, 'profiles', name)
+  if (mode.mode === 'portable') {
+    return portableProfileState(profileDir, portableNodeModulesTarget(mode))
+  }
+  return existsSync(join(profileDir, 'node_modules', 'oh-my-dsh')) ? 'linked' : 'missing'
+}
+
 function profileReady(name) {
+  const mode = distributionContext()
+  if (mode.mode === 'portable') {
+    return portableProfileReady(join(dshHome, 'profiles', name), portableNodeModulesTarget(mode))
+  }
   return existsSync(join(dshHome, 'profiles', name, 'node_modules', 'oh-my-dsh'))
 }
 
 function ensureProfile(name) {
-  if (!profileReady(name)) {
+  if (profileReady(name)) return
+  const state = profileRuntimeState(name)
+  if (state === 'stale-tree' || state === 'stale-link') {
+    console.log(`omd: profile ${name} is not linked to this portable closure; relinking now.`)
+  } else {
     console.log(`omd: profile ${name} is not installed; setting it up now.`)
-    setup()
   }
+  setup()
 }
 
 function dshBin() {
@@ -366,7 +388,13 @@ async function doctor(args = []) {
   console.log(`Node: ${process.version}`)
   console.log(`DSH_HOME: ${dshHome}`)
   for (const name of Object.keys(profiles)) {
-    console.log(`${name}: ${profileReady(name) ? 'installed' : 'missing'}`)
+    const state = profileRuntimeState(name)
+    if (mode.mode === 'portable') {
+      console.log(`${name}: ${describePortableProfileState(state)}`)
+      if (state === 'stale-tree' || state === 'stale-link') process.exitCode = 1
+    } else {
+      console.log(`${name}: ${state === 'linked' ? 'installed' : 'missing'}`)
+    }
   }
   try {
     console.log(`dsh: ${require('@deepseek-ai/dsh/package.json').version}`)
@@ -656,6 +684,7 @@ async function update() {
     })
 
     console.log(`omd: updated to ${releaseManifest.omdVersion}`)
+    setup()
     console.log('omd: run `omd rollback` to return to the previous version if needed.')
   } finally {
     if (stagingDir) rmSync(stagingDir, { recursive: true, force: true })

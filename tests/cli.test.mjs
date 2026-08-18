@@ -202,6 +202,45 @@ test('CLI help and curated preset configuration work without booting dsh', () =>
   }
 })
 
+test('portable omd doctor reports a leftover npm profile as stale and setup relinks it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-portable-stale-profile-'))
+  try {
+    const { installRoot, dshHome, omd } = createPortableInstall(root)
+    const profileDir = join(dshHome, 'profiles', 'omd')
+    mkdirSync(join(profileDir, 'node_modules', 'oh-my-dsh'), { recursive: true })
+    writeFileSync(
+      join(profileDir, 'node_modules', 'oh-my-dsh', 'package.json'),
+      JSON.stringify({ name: 'oh-my-dsh', version: '0.1.6' }),
+    )
+    writeFileSync(
+      join(profileDir, 'package.json'),
+      JSON.stringify({ name: 'dsh-profile-omd', private: true }),
+    )
+
+    const doctor = runPortable(omd, ['doctor'], {
+      DSH_HOME: dshHome,
+      OMD_INSTALL_ROOT: installRoot,
+    })
+    assert.notEqual(doctor.status, 0)
+    assert.match(doctor.stdout, /omd: stale npm\/source tree/)
+    assert.ok(!lstatSync(join(profileDir, 'node_modules')).isSymbolicLink())
+
+    const setup = runPortable(omd, ['setup'], {
+      DSH_HOME: dshHome,
+      OMD_INSTALL_ROOT: installRoot,
+      OMD_NPM: '/usr/bin/false',
+    })
+    assert.equal(setup.status, 0, setup.stderr || setup.stdout)
+    assert.ok(lstatSync(join(profileDir, 'node_modules')).isSymbolicLink())
+    assert.equal(
+      resolve(readlinkSync(join(profileDir, 'node_modules'))),
+      resolve(installRoot, 'current', 'app', 'node_modules'),
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('portable omd setup links profile node_modules to distribution app/node_modules without npm', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-portable-cli-'))
   try {

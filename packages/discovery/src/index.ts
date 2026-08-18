@@ -697,7 +697,10 @@ export function apply(ctx: Context, config: Config): void {
     }
 
     const trusted = isTrustedWorkspace(workspace, home)
-    await agentCtx.mcpControl.configure(
+    // Host-plane service: the agent scope is minted under agent-loop, a sibling
+    // of mcp-control. `agentCtx.mcpControl` therefore walks a fiber that never
+    // injected it and throws `cannot get property "mcpControl" without inject`.
+    await ctx.mcpControl.configure(
       agent,
       config.mcp === false ? [] : discoverMcpCatalog(workspace, home, trusted),
     )

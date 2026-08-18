@@ -3,6 +3,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { Context, Service } from '@deepseek-ai/cordis'
+import { createScope } from '@deepseek-ai/dsh-scope'
+import * as Discovery from '../dist/packages/discovery/src/index.js'
 import {
   discoverInstructions,
   discoverMcpCatalog,
@@ -123,4 +126,62 @@ test('MCP namespaces remain distinct after sanitizing foreign server names', () 
   assert.notEqual(dotted, slashed)
   assert.match(dotted, /^[A-Za-z0-9_-]{1,32}$/)
   assert.match(slashed, /^[A-Za-z0-9_-]{1,32}$/)
+})
+
+test('resume setup reads mcpControl from the host plugin, not the agent scope', async () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'omd-discovery-resume-'))
+  const configured = []
+
+  class SiblingMcpControl extends Service {
+    constructor(ctx) {
+      super(ctx, 'mcpControl')
+    }
+    async configure(agent, definitions) {
+      configured.push({ id: agent.id, definitions })
+    }
+  }
+
+  const host = new Context()
+  function harness(ctx) {
+    ctx.provide('skills', {})
+    ctx.provide('tools', {})
+    ctx.provide('commands', { register() {} })
+    ctx.provide('shell', {})
+    const start = async (options) => {
+      const agent = {
+        id: 'session-resume',
+        inject() {},
+        session: { header: { cwd: workspace }, events: [] },
+      }
+      const scope = createScope(ctx, agent)
+      agent.ctx = scope.ctx
+      await options.setup?.(scope.ctx)
+      return { id: agent.id }
+    }
+    const agents = {
+      create: start,
+      resume: start,
+    }
+    ctx.provide('agents', agents)
+  }
+
+  try {
+    await host.plugin(harness)
+    await host.plugin(SiblingMcpControl)
+    await host.plugin(Discovery, {
+      skills: false,
+      hooks: false,
+      commands: false,
+      instructions: false,
+      mcp: false,
+    })
+
+    const agents = host.reflect.get('agents')
+    await agents.resume({})
+    assert.equal(configured.length, 1)
+    assert.equal(configured[0].id, 'session-resume')
+    assert.deepEqual(configured[0].definitions, [])
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
 })
