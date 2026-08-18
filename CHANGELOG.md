@@ -43,9 +43,11 @@ Upstream compatibility for each release is listed in the
 - Upstream compatibility: upgraded all `@deepseek-ai/dsh*` dependencies to
   `0.1.0-rc.7`, and updated `@deepseek-ai/dsh-skill-badge` in the curated
   catalog to `0.1.0-rc.7` with its reviewed npm integrity hash.
-- README quick start leads with the portable bootstrap installer, followed by
-  manual tarball verification and npm options. Capability tiers (Core, Bundled
-  Optional, Curated Integrations, User Growth) are documented explicitly.
+- README quick start now leads with npm until portable artifacts ship, and
+  documents the evergreen portable installer at
+  `releases/latest/download/install.sh`. Pins use `OMD_VERSION` instead of a
+  versioned raw git URL. Capability tiers (Core, Bundled Optional, Curated
+  Integrations, User Growth) are documented explicitly.
 - Community catalog entries now require machine-readable repository,
   publisher, npm SHA-512 integrity, and optional reviewed-commit provenance.
   The same evidence is copied into the load proposal for approval.

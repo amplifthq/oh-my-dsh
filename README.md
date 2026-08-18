@@ -27,42 +27,13 @@ It is a native curated distribution, not a fork. You keep upstream's “everythi
 
 ## Quick start
 
-Portable releases ship a self-contained Node.js runtime and production dependency closure for **macOS arm64** and **Linux x64 (glibc)**. No system Node.js, npm, pnpm, or root access is required. CI covers Linux and macOS on Node 22 and 24; Windows is not yet tested — use WSL2.
+CI covers Linux and macOS on Node 22 and 24; Windows is not yet tested — use WSL2.
 
-### Portable install (recommended)
+Portable archives (embedded Node.js, no system Node/npm/root) ship with the upcoming **0.2.0** release. Published tags through `v0.1.6` are npm-only, so use npm or a source checkout until 0.2.0 is tagged.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/main/install.sh | sh
-omd setup
-omd
-```
+### npm install (current)
 
-Pin a release tag instead of `main`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/v0.2.0/install.sh | sh
-```
-
-The bootstrap installs under `~/.local/share/oh-my-dsh/`, links `~/.local/bin/omd`, and runs a health check without system Node.js on `PATH`. If `~/.local/bin` is not on your `PATH`, the installer prints the exact export command for your shell.
-
-The first setup can take several minutes. It installs two isolated profiles under `~/.dsh/profiles/`:
-
-- `omd` — interactive Web UI.
-- `omd-headless` — one-shot terminal tasks.
-
-### Manual archive install
-
-Download the platform tarball, `SHA256SUMS`, and `release-manifest.json` from [GitHub Releases](https://github.com/amplifthq/oh-my-dsh/releases). Verify the digest, extract, and run the packaged `bin/omd setup`.
-
-On macOS, browser-downloaded archives may carry a quarantine attribute that Gatekeeper blocks. Clear it before running:
-
-```sh
-xattr -dr com.apple.quarantine oh-my-dsh-v0.2.0-darwin-arm64.tar.gz
-```
-
-### npm install (developers)
-
-The npm package is the developer and composition channel. It requires Node.js `^22.19.0` or `>=24.0.0` on your machine:
+Requires Node.js `^22.19.0` or `>=24.0.0`:
 
 ```sh
 npm install --global oh-my-dsh
@@ -75,6 +46,39 @@ Prefer not to install globally?
 ```sh
 npx oh-my-dsh@latest setup
 npx oh-my-dsh@latest
+```
+
+The first setup can take several minutes. It installs two isolated profiles under `~/.dsh/profiles/`:
+
+- `omd` — interactive Web UI.
+- `omd-headless` — one-shot terminal tasks.
+
+### Portable install (0.2.0+)
+
+Once a portable release is published, this URL always follows the latest non-prerelease GitHub Release. Do not pin a raw git tag in the installer URL — those go stale, and `main` can disagree with the published artifacts.
+
+```sh
+curl -fsSL https://github.com/amplifthq/oh-my-dsh/releases/latest/download/install.sh | sh
+omd setup
+omd
+```
+
+The bootstrap and the archives come from the same latest release. To pin a published version, keep that same installer URL and set `OMD_VERSION`:
+
+```sh
+OMD_VERSION=v0.2.0 curl -fsSL https://github.com/amplifthq/oh-my-dsh/releases/latest/download/install.sh | sh
+```
+
+The bootstrap installs under `~/.local/share/oh-my-dsh/`, links `~/.local/bin/omd`, and runs a health check without system Node.js on `PATH`. If `~/.local/bin` is not on your `PATH`, the installer prints the exact export command for your shell.
+
+### Manual archive install (0.2.0+)
+
+Download the platform tarball, `SHA256SUMS`, and `release-manifest.json` from the [latest GitHub Release](https://github.com/amplifthq/oh-my-dsh/releases/latest). Verify the digest, extract, and run the packaged `bin/omd setup`.
+
+On macOS, browser-downloaded archives may carry a quarantine attribute that Gatekeeper blocks. Clear it before running:
+
+```sh
+xattr -dr com.apple.quarantine oh-my-dsh-*-darwin-arm64.tar.gz
 ```
 
 Both channels share the same OMD version and Cordis composition. A release is incomplete until npm and every required portable artifact have passed their checks.

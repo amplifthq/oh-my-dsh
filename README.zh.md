@@ -27,42 +27,13 @@ DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。
 
 ## 快速开始
 
-便携版发行包自带 Node.js 运行时和生产依赖闭包，支持 **macOS arm64** 和 **Linux x64（glibc）**。无需系统 Node.js、npm、pnpm 或 root 权限。CI 覆盖 Linux 与 macOS（Node 22、24）；Windows 尚未测试，请使用 WSL2。
+CI 覆盖 Linux 与 macOS（Node 22、24）；Windows 尚未测试，请使用 WSL2。
 
-### 便携版安装（推荐）
+便携版归档（内嵌 Node.js，无需系统 Node/npm/root）随即将发布的 **0.2.0** 提供。已发布的 tag 到 `v0.1.6` 为止都只有 npm 包，在 0.2.0 打 tag 之前请用 npm 或源码 checkout。
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/main/install.sh | sh
-omd setup
-omd
-```
+### npm 安装（当前可用）
 
-固定 release tag 而非 `main`：
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/amplifthq/oh-my-dsh/v0.2.0/install.sh | sh
-```
-
-引导脚本安装到 `~/.local/share/oh-my-dsh/`，链接 `~/.local/bin/omd`，并在 `PATH` 不含系统 Node.js 的情况下运行健康检查。若 `~/.local/bin` 不在 `PATH` 中，安装器会打印当前 shell 的 export 命令。
-
-第一次 setup 可能需要几分钟。它会在 `~/.dsh/profiles/` 下安装两个隔离 profile：
-
-- `omd`：交互式 Web UI。
-- `omd-headless`：一次性终端任务。
-
-### 手动归档安装
-
-从 [GitHub Releases](https://github.com/amplifthq/oh-my-dsh/releases) 下载平台 tarball、`SHA256SUMS` 和 `release-manifest.json`。校验 digest 后解压，运行包内 `bin/omd setup`。
-
-在 macOS 上，浏览器下载的归档可能带有 quarantine 属性，Gatekeeper 会阻止运行。运行前清除：
-
-```sh
-xattr -dr com.apple.quarantine oh-my-dsh-v0.2.0-darwin-arm64.tar.gz
-```
-
-### npm 安装（开发者）
-
-npm 包面向开发者和组合场景，需要本机 Node.js `^22.19.0` 或 `>=24.0.0`：
+需要 Node.js `^22.19.0` 或 `>=24.0.0`：
 
 ```sh
 npm install --global oh-my-dsh
@@ -75,6 +46,39 @@ omd
 ```sh
 npx oh-my-dsh@latest setup
 npx oh-my-dsh@latest
+```
+
+第一次 setup 可能需要几分钟。它会在 `~/.dsh/profiles/` 下安装两个隔离 profile：
+
+- `omd`：交互式 Web UI。
+- `omd-headless`：一次性终端任务。
+
+### 便携版安装（0.2.0+）
+
+便携版 release 发布后，这条 URL 会始终跟随最新的非预发布 GitHub Release。不要把 raw git tag 写进安装器地址——tag 会过期，而 `main` 上的脚本也可能和已发布制品不一致。
+
+```sh
+curl -fsSL https://github.com/amplifthq/oh-my-dsh/releases/latest/download/install.sh | sh
+omd setup
+omd
+```
+
+引导脚本和归档来自同一次 latest release。要固定已发布版本，仍用这条安装器 URL，再设置 `OMD_VERSION`：
+
+```sh
+OMD_VERSION=v0.2.0 curl -fsSL https://github.com/amplifthq/oh-my-dsh/releases/latest/download/install.sh | sh
+```
+
+引导脚本安装到 `~/.local/share/oh-my-dsh/`，链接 `~/.local/bin/omd`，并在 `PATH` 不含系统 Node.js 的情况下运行健康检查。若 `~/.local/bin` 不在 `PATH` 中，安装器会打印当前 shell 的 export 命令。
+
+### 手动归档安装（0.2.0+）
+
+从[最新 GitHub Release](https://github.com/amplifthq/oh-my-dsh/releases/latest) 下载平台 tarball、`SHA256SUMS` 和 `release-manifest.json`。校验 digest 后解压，运行包内 `bin/omd setup`。
+
+在 macOS 上，浏览器下载的归档可能带有 quarantine 属性，Gatekeeper 会阻止运行。运行前清除：
+
+```sh
+xattr -dr com.apple.quarantine oh-my-dsh-*-darwin-arm64.tar.gz
 ```
 
 两个渠道共享同一 OMD 版本和 Cordis 组合。只有 npm 和所有必需的便携版 artifact 都通过检查，release 才算完整。
