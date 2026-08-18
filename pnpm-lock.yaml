@@ -157,6 +157,10 @@ importers:
 
   packages/editor: {}
 
+  packages/harness-eval: {}
+
+  packages/harness-opt: {}
+
   packages/kernel: {}
 
   packages/lsp-auto: {}
