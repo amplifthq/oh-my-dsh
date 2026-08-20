@@ -24,7 +24,7 @@ How to move the pinned `@deepseek-ai/dsh*` release without breaking the overlay.
    DSH_HOME=<same dir> node bin/omd config > /dev/null
    ```
 
-4. Manual pass in the Web UI: activate one MCP preset through a proposal, run one `semantic_refactor` rename end to end (preview → approve → diagnostics), one web fetch, one `@file` mention, `/usage`.
+4. Manual pass in the Web UI: activate one MCP preset through a proposal, run one `semantic_refactor` rename end to end (preview → approve → diagnostics), one web fetch, select one ordinary `@file` reference and verify the model reads it on demand, submit one explicit `@file:start-end` range and verify its hash anchors arrive in the same step, `/usage`.
 5. If a seam broke: prefer fixing the overlay; when the change looks unintentional, file a minimal reproduction upstream and link the canary run. Do not patch `node_modules`, do not fork.
 6. Update the README compatibility table (both languages), add a CHANGELOG entry, and release per [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -40,6 +40,7 @@ How to move the pinned `@deepseek-ai/dsh*` release without breaking the overlay.
 | `McpClient` plugin mount/dispose and tool namespace shape              | mcp-control activation lifecycle                                               |
 | `ctx.plugin()` mount, `Fiber.await/dispose`, plugin `provide`/`inject` | plugin-control controller; plugin-forge mounts through it                      |
 | `ctx.tools.schemas(scope)`, `ctx.skills.snapshot`, `ctx.commands.list` | capability-discovery unified catalog; plugin-forge mount-time tool attribution |
+| `fileReferences.list`, mention grammar, and read-on-demand prompt      | upstream Web completion; OMD explicit-range snapshot selector and prompt       |
 | `decodeStorageRecord` + session log layout (`.jsonl`, `.jsonl.zstd`)   | `omd usage`                                                                    |
 | Approval service semantics (`ask` is never auto-granted)               | proposals, debug, danger-full-access behavior                                  |
 | Bundle patch ordering, `--profile`, `--dump-config`                    | `bin/omd`, `bundles/omd.cordis.yml`                                            |

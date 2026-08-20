@@ -19,7 +19,7 @@
   English | <a href="README.zh.md">中文</a>
 </p>
 
-DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, persistent code kernels, and approval-gated skill distillation that turns verified procedures into reusable skills.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, upstream `@file` discovery with anchored line-range snapshots, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, persistent code kernels, and approval-gated skill distillation that turns verified procedures into reusable skills.
 
 It is a native curated distribution, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
@@ -210,7 +210,7 @@ This is the strongest grant OMD can make: an active plugin runs in-process with 
 
 The deliberately small catalog currently contains two reviewed plugins:
 
-- `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.7` pin and is inert until an approved session load.
+- `dsh-skill-badge` — exposes DeepSeek's official attribution skill. It ships at the reviewed `0.1.0-rc.8` pin and is inert until an approved session load.
 - `dsh-pkg-info` — adds a read-only `pkg_info` tool for public npm and PyPI metadata. The catalog pins the reviewed community artifact at `0.1.1`, records its repository, publisher, npm integrity, and source commit, and states its registry network and public-metadata exposure before approval.
 
 Catalog admission, rejection evidence, and review requirements are documented in [Plugin catalog curation](docs/organ-bank-curation.md).
@@ -235,9 +235,9 @@ Static discipline is enforced before a proposal can exist: valid ESM only (V8 pa
 
 `opt_control` picks the next harness mutation from a locked action set — `prepare_promote`, `prepare_forge`, `prepare_unload`, `prepare_save`, `noop` — using a durable policy file under `$DSH_HOME/omd/opt/policy.json`. Two actions: `suggest`, `show`. `suggest` credits new `eval_control compare` results against the last suggestion, observes only candidates that already pass the eval gates, and returns one arm plus a next tool call. It never applies a proposal, invents plugin source or a skill body, or writes [`presets/plugins.json`](presets/plugins.json). `/omd-opt` reads the policy. Select and retain stay on `proposal_control apply`.
 
-### Daily-use tools upstream does not prioritize
+### OMD daily-use extensions
 
-- `@file` mentions: reference workspace files in your message as `@path`, `@path:12-40`, or `@"path with spaces"`. The mentioned content is attached to the same model step, bounded in size, and rendered as `hash_edit`-compatible anchors. Parsing is text-only (no composer autocomplete); files outside the workspace are never attached.
+- `@file` discovery and anchored ranges: rc.8's Web composer completes ordinary `@path` and `@"path with spaces"` references. Those references remain path-only, so the model uses `read` when it needs their contents. Add `:start-end` — for example `@path:12-40` or `@"path with spaces":12-40` — to explicitly attach that workspace range to the same model step as bounded, `hash_edit`-compatible anchors. Range snapshots work in both profiles.
 - `hash_edit` performs stale-safe multi-line replacement using per-line anchors and a final filesystem version guard.
 - `semantic_refactor` prepares version-guarded, recoverable multi-file LSP rename transactions.
 - `kernel` provides session-persistent JavaScript and Python state, with callbacks into dsh tools.
@@ -329,7 +329,7 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 - Project integrations are gated by `omd trust`.
 - MCP definitions do not start, expand environment placeholders, or expose schemas during discovery. Expansion happens on the host only after an approved activation and values never enter prompts or metadata caches.
 - Semantic refactors reject edits outside the session workspace and recheck every observed file version before writing.
-- `@file` mentions attach only workspace files, stay bounded, and treat attached content as data rather than instructions.
+- Only explicit `@file:start-end` ranges are attached by OMD. They resolve only workspace files, stay bounded, and treat attached content as data rather than instructions; plain `@file` references attach nothing.
 - Web fetch blocks private, loopback, link-local, and cloud-metadata destinations both at URL validation and at DNS-connect time (rebinding-safe). `OMD_WEB_FETCH_ALLOW_PRIVATE=1` removes that guard; `DSH_WEB_FETCH_PROVIDER=http` selects upstream's provider, which has no such protection.
 - DAP debugging is off until `OMD_ENABLE_DEBUG=1`. Launch and attach still require an approved proposal; debuggee paths stay inside the workspace.
 - Glob-scoped Cursor rules are not applied globally when dsh cannot determine the active file.
@@ -338,10 +338,11 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 
 ## Compatibility
 
-| oh-my-dsh   | DeepSeek Harness (`@deepseek-ai/dsh*`) | Node.js / runtime                                     |
-| ----------- | -------------------------------------- | ----------------------------------------------------- |
-| 0.1.7+      | `0.1.0-rc.7` (exact pin)               | Embedded (portable) or `^22.19.0 \|\| >=24.0.0` (npm) |
-| 0.1.0–0.1.6 | `0.1.0-rc.6` (exact pin)               | `^22.19.0 \|\| >=24.0.0`                              |
+| oh-my-dsh         | DeepSeek Harness (`@deepseek-ai/dsh*`) | Node.js / runtime                                     |
+| ----------------- | -------------------------------------- | ----------------------------------------------------- |
+| main (unreleased) | `0.1.0-rc.8` (exact pin)               | Embedded (portable) or `^22.19.0 \|\| >=24.0.0` (npm) |
+| 0.1.7             | `0.1.0-rc.7` (exact pin)               | Embedded (portable) or `^22.19.0 \|\| >=24.0.0` (npm) |
+| 0.1.0–0.1.6       | `0.1.0-rc.6` (exact pin)               | `^22.19.0 \|\| >=24.0.0`                              |
 
 Upstream is in developer preview, so `oh-my-dsh` pins one tested release and never follows breaking changes silently. A [weekly canary workflow](.github/workflows/canary.yml) additionally tests the overlay against `dsh@next`, so an incompatible upcoming release is filed as an issue before it ships. Upgrades follow [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md).
 

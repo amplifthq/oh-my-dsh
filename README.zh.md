@@ -19,7 +19,7 @@
   <a href="README.md">English</a> | 中文
 </p>
 
-DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、工作区 `@file` 引用、安全编辑、默认开启的 SSRF 加固网页抓取、可选 DAP 调试、通知、usage 汇总、持久代码 kernel，以及经审批把验证过的流程蒸馏成可复用技能的 skill forge。
+DeepSeek Harness 提供了优秀的插件框架和一套保守的参考组合。`oh-my-dsh` 把这些零件装成一台能直接工作的机器：正式 profile、惰性复用现有 MCP 配置、LSP 导航与可恢复语义改名、上游 `@file` 发现与带 anchor 的行范围快照、安全编辑、默认开启的 SSRF 加固网页抓取、可选 DAP 调试、通知、usage 汇总、持久代码 kernel，以及经审批把验证过的流程蒸馏成可复用技能的 skill forge。
 
 它是原生精选发行版，不是 fork。上游“一切皆插件”的架构保持不变，每项默认选择都可以覆盖。
 
@@ -210,7 +210,7 @@ omd trust add .
 
 精选插件库目前刻意只收两个通过审查的插件：
 
-- `dsh-skill-badge`——提供 DeepSeek 官方署名技能；固定在审查过的 `0.1.0-rc.7`，只有经批准的 session 装载才会激活。
+- `dsh-skill-badge`——提供 DeepSeek 官方署名技能；固定在审查过的 `0.1.0-rc.8`，只有经批准的 session 装载才会激活。
 - `dsh-pkg-info`——提供只读的 `pkg_info` 工具，查询公开 npm / PyPI 元数据；固定在审查过的社区制品 `0.1.1`，目录记录其仓库、发布者、npm integrity 和源码 commit，并在审批前明确注册表网络访问（含默认重定向行为）及公开元数据暴露风险。
 
 准入、拒绝证据和审查规则见[《精选插件库策展规范》](docs/organ-bank-curation.md)。
@@ -235,9 +235,9 @@ omd trust add .
 
 `opt_control` 在锁定动作集上做持久化 bandit：`prepare_promote`、`prepare_forge`、`prepare_unload`、`prepare_save`、`noop`。策略文件在 `$DSH_HOME/omd/opt/policy.json`。两个动作：`suggest`、`show`。`suggest` 用新的 `eval_control compare` 给上次提议记账，只观察已经过 eval 门禁的候选，然后返回一个臂和下一步工具调用。它从不 apply proposal、不编造插件源码或 skill 正文、也不写 [`presets/plugins.json`](presets/plugins.json)。`/omd-opt` 读策略。选择和保留仍然是 `proposal_control apply`。
 
-### 上游不会优先做的日用工具
+### OMD 日用扩展
 
-- `@file` 引用：在消息中用 `@path`、`@path:12-40` 或 `@"带空格的路径"` 引用工作区文件。被引用内容随同一 model step 注入、有大小上限，并渲染为 `hash_edit` 可直接使用的 anchor。仅做文本解析（输入框没有自动补全）；工作区之外的文件永远不会被注入。
+- `@file` 发现与范围 anchor：rc.8 的 Web 输入框会补全普通 `@path` 和 `@"带空格的路径"`。这类引用只保留路径，模型需要内容时再调用 `read`。追加 `:start-end`，例如 `@path:12-40` 或 `@"带空格的路径":12-40`，才会把该工作区范围显式注入同一个 model step；内容有大小上限，并渲染为 `hash_edit` 可直接使用的 anchor。两个 profile 都支持范围快照。
 - `hash_edit` 使用逐行 anchor 和最终 filesystem version guard，安全替换多行内容。
 - `semantic_refactor` 创建带版本保护、可恢复的多文件 LSP 改名事务。
 - `kernel` 提供 session 级持久 JavaScript/Python 状态，并能回调 dsh 工具。
@@ -329,7 +329,7 @@ OMD_ENABLE_DEBUG=1 omd
 - 项目集成受 `omd trust` 保护。
 - MCP 定义在发现阶段不会启动、展开环境变量或暴露 schema。只有审批激活后才在 host 侧展开，值不会进入模型提示或元数据缓存。
 - 语义重构拒绝 session workspace 之外的 edit，并在写入前重新检查每个已观察文件的版本。
-- `@file` 只注入工作区内的文件，有大小上限，并把附件当作数据而不是指令。
+- OMD 只注入显式的 `@file:start-end` 范围：仅解析工作区内文件、限制内容大小，并把附件当作数据而不是指令；普通 `@file` 不附加内容。
 - 网页抓取在 URL 校验和 DNS 建连两个环节拦截私有、回环、链路本地和云 metadata 地址（对 rebinding 免疫）。`OMD_WEB_FETCH_ALLOW_PRIVATE=1` 会移除该防护；`DSH_WEB_FETCH_PROVIDER=http` 选择的上游 provider 没有这层防护。
 - DAP 调试默认关闭，需 `OMD_ENABLE_DEBUG=1`。launch 和 attach 仍要经过批准的 proposal；被调试路径必须位于工作区内。
 - dsh 无法确定当前文件时，不会把 glob-scoped Cursor rule 错误应用到全局。
@@ -338,10 +338,11 @@ OMD_ENABLE_DEBUG=1 omd
 
 ## 兼容性
 
-| oh-my-dsh   | DeepSeek Harness（`@deepseek-ai/dsh*`） | Node.js / 运行时                                 |
-| ----------- | --------------------------------------- | ------------------------------------------------ |
-| 0.1.7+      | `0.1.0-rc.7`（精确锁定）                | 内嵌（便携版）或 `^22.19.0 \|\| >=24.0.0`（npm） |
-| 0.1.0–0.1.6 | `0.1.0-rc.6`（精确锁定）                | `^22.19.0 \|\| >=24.0.0`                         |
+| oh-my-dsh      | DeepSeek Harness（`@deepseek-ai/dsh*`） | Node.js / 运行时                                 |
+| -------------- | --------------------------------------- | ------------------------------------------------ |
+| main（未发布） | `0.1.0-rc.8`（精确锁定）                | 内嵌（便携版）或 `^22.19.0 \|\| >=24.0.0`（npm） |
+| 0.1.7          | `0.1.0-rc.7`（精确锁定）                | 内嵌（便携版）或 `^22.19.0 \|\| >=24.0.0`（npm） |
+| 0.1.0–0.1.6    | `0.1.0-rc.6`（精确锁定）                | `^22.19.0 \|\| >=24.0.0`                         |
 
 上游仍处于 developer preview，因此 `oh-my-dsh` 锁定一个经过验证的版本，绝不静默追随破坏性变更。[每周 canary 工作流](.github/workflows/canary.yml)会额外用 `dsh@next` 测试 overlay，上游即将发布的不兼容变更会先变成 issue，而不是先砸到用户。升级流程见 [docs/upstream-upgrade-playbook.md](docs/upstream-upgrade-playbook.md)。
 

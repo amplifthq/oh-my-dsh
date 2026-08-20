@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-dsh/mentions",
   "version": "0.1.0",
-  "description": "Workspace @file mentions expanded into hash-anchored context for DeepSeek Harness.",
+  "description": "Explicit @file line ranges expanded into bounded hash-anchored context for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
   "keywords": [

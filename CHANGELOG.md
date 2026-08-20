@@ -56,6 +56,19 @@ Upstream compatibility for each release is listed in the
 
 ### Changed
 
+- Upstream compatibility: upgraded all directly pinned `@deepseek-ai/dsh*`
+  dependencies to `0.1.0-rc.8`, and updated `@deepseek-ai/dsh-skill-badge` in
+  the curated catalog to `0.1.0-rc.8` with its reviewed npm integrity hash.
+- File references now follow the rc.8 seam: ordinary `@path` references remain
+  path-only and are read on demand, while only explicit `@path:start-end`
+  ranges receive OMD's bounded, `hash_edit`-compatible same-step snapshot.
+- DeepSeek Harness `rc.8` changes the schema of its opt-in SQLite session-search
+  derived index; it is not the session-persistence database. OMD keeps this
+  index at `path: :memory:` with `openAt: never`, so SQLite is not opened and
+  canonical JSONL session logs are unaffected. Custom durable search indexes
+  must use a dedicated path: back them up if desired, then let rc.8 rebuild a
+  recognized incompatible derived schema in place. Never point the index at a
+  canonical session-persistence or unrelated database; rc.8 refuses those.
 - README documents Windows as WSL2-only: install the linux-x64 portable
   distribution inside Ubuntu, keep projects on the Linux filesystem, and do
   not run `install.sh` from PowerShell or `cmd.exe`.

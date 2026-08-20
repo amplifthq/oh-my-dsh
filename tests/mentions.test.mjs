@@ -6,6 +6,7 @@ import {
   renderFileWindow,
   resolveSections,
   scanLines,
+  snapshotMentionsInMessages,
 } from '../dist/packages/mentions/src/index.js'
 import { lineHash } from '../dist/packages/editor/src/index.js'
 
@@ -63,6 +64,31 @@ test('mentionsInMessages reads only user-sourced text blocks', () => {
     mentionsInMessages(messages).map((mention) => mention.path),
     ['one.ts', 'three.ts'],
   )
+})
+
+test('snapshot selection keeps explicit ranges and leaves plain references for upstream', () => {
+  const messages = [
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: 'inspect @plain.ts, @range.ts:2-4, @"plain path.md", @"range path.md":5-6, and @invalid.ts:4-2',
+        },
+      ],
+      source: { kind: 'user' },
+    },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'ignore @plugin.ts:1-2' }],
+      source: { kind: 'plugin', plugin: 'x' },
+    },
+  ]
+
+  assert.deepEqual(snapshotMentionsInMessages(messages), [
+    { raw: '@range.ts:2-4', path: 'range.ts', start: 2, end: 4 },
+    { raw: '@"range path.md":5-6', path: 'range path.md', start: 5, end: 6 },
+  ])
 })
 
 async function* chunked(text, size = 4) {

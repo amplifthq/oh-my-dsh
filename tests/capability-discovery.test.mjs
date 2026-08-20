@@ -73,7 +73,7 @@ function fixtureCatalog() {
     buildPluginCapability({
       id: 'dsh-skill-badge',
       module: '@deepseek-ai/dsh-skill-badge',
-      version: '0.1.0-rc.7',
+      version: '0.1.0-rc.8',
       summary: 'Expose the upstream dsh-badge skill for attribution.',
       risk: 'Adds model-visible instructions that may insert DeepSeek attribution.',
       source: 'upstream',
@@ -153,7 +153,7 @@ test('builders attach exact next-action instructions for each kind', () => {
   const plugin = buildPluginCapability({
     id: 'dsh-skill-badge',
     module: '@deepseek-ai/dsh-skill-badge',
-    version: '0.1.0-rc.7',
+    version: '0.1.0-rc.8',
     summary: 'Badge.',
     risk: 'Attribution text.',
     source: 'upstream',
@@ -169,7 +169,7 @@ test('builders attach exact next-action instructions for each kind', () => {
   const activePlugin = buildPluginCapability({
     id: 'dsh-skill-badge',
     module: '@deepseek-ai/dsh-skill-badge',
-    version: '0.1.0-rc.7',
+    version: '0.1.0-rc.8',
     summary: 'Badge.',
     risk: 'Attribution text.',
     source: 'upstream',
@@ -410,14 +410,14 @@ function sampleSources(overrides = {}) {
       {
         id: 'dsh-skill-badge',
         module: '@deepseek-ai/dsh-skill-badge',
-        version: '0.1.0-rc.7',
+        version: '0.1.0-rc.8',
         summary: 'Attribution skill.',
         risk: 'May insert DeepSeek attribution into generated content.',
         manifest: { name: 'skill-badge', provide: [], inject: ['skills'] },
         source: 'upstream',
         availability: {
           status: 'available',
-          installedVersion: '0.1.0-rc.7',
+          installedVersion: '0.1.0-rc.8',
           packageJsonPath: '/x',
         },
         active: false,
