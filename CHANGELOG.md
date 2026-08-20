@@ -56,6 +56,14 @@ Upstream compatibility for each release is listed in the
 
 ### Changed
 
+- Upstream compatibility: upgraded all directly pinned `@deepseek-ai/dsh*`
+  dependencies to `0.1.0-rc.8`, and updated `@deepseek-ai/dsh-skill-badge` in
+  the curated catalog to `0.1.0-rc.8` with its reviewed npm integrity hash.
+- DeepSeek Harness `rc.8` changes the schema of its opt-in SQLite session
+  persistence provider without supplying a migration. OMD's default profiles
+  continue to use canonical JSONL session logs and are unaffected; custom
+  compositions that enabled SQLite persistence must retain the old database
+  and configure a new `rc.8` database instead of opening it in place.
 - README documents Windows as WSL2-only: install the linux-x64 portable
   distribution inside Ubuntu, keep projects on the Linux filesystem, and do
   not run `install.sh` from PowerShell or `cmd.exe`.

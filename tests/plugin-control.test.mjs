@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
+import { load as parseYaml } from 'js-yaml'
 
 import {
   organView,
@@ -536,7 +537,7 @@ test('the bundled catalog loads every exact-pinned plugin only on proposal apply
       {
         id: 'dsh-skill-badge',
         module: '@deepseek-ai/dsh-skill-badge',
-        version: '0.1.0-rc.7',
+        version: '0.1.0-rc.8',
       },
       {
         id: 'dsh-pkg-info',
@@ -587,4 +588,30 @@ test('the bundled catalog loads every exact-pinned plugin only on proposal apply
     }
   }
   await ctx.root.fiber.dispose()
+})
+
+test('the bundled catalog provenance matches the frozen lockfile artifacts', async () => {
+  const lockfile = parseYaml(await readFile(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8'))
+  const rootDependencies = lockfile.importers['.'].dependencies
+  const packages = lockfile.packages
+
+  for (const catalogEntry of readBundledOrganIndex()) {
+    const dependency = rootDependencies[catalogEntry.module]
+    assert.ok(dependency, `${catalogEntry.module} must be a direct dependency`)
+    assert.equal(dependency.specifier, catalogEntry.version)
+    assert.ok(
+      dependency.version === catalogEntry.version ||
+        dependency.version.startsWith(`${catalogEntry.version}(`),
+      `${catalogEntry.module} must resolve to ${catalogEntry.version}`,
+    )
+
+    const snapshotPrefix = `${catalogEntry.module}@${catalogEntry.version}`
+    const packageRecord = packages[snapshotPrefix]
+    assert.ok(packageRecord, `${snapshotPrefix} must have one frozen package record`)
+    assert.equal(
+      catalogEntry.provenance.integrity,
+      packageRecord.resolution.integrity,
+      `${snapshotPrefix} integrity must match pnpm-lock.yaml`,
+    )
+  }
 })
