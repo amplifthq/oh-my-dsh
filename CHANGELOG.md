@@ -59,6 +59,9 @@ Upstream compatibility for each release is listed in the
 - Upstream compatibility: upgraded all directly pinned `@deepseek-ai/dsh*`
   dependencies to `0.1.0-rc.8`, and updated `@deepseek-ai/dsh-skill-badge` in
   the curated catalog to `0.1.0-rc.8` with its reviewed npm integrity hash.
+- File references now follow the rc.8 seam: ordinary `@path` references remain
+  path-only and are read on demand, while only explicit `@path:start-end`
+  ranges receive OMD's bounded, `hash_edit`-compatible same-step snapshot.
 - DeepSeek Harness `rc.8` changes the schema of its opt-in SQLite session
   persistence provider without supplying a migration. OMD's default profiles
   continue to use canonical JSONL session logs and are unaffected; custom

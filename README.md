@@ -19,7 +19,7 @@
   English | <a href="README.zh.md">中文</a>
 </p>
 
-DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, workspace `@file` mentions, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, persistent code kernels, and approval-gated skill distillation that turns verified procedures into reusable skills.
+DeepSeek Harness provides an excellent plugin framework and a conservative reference setup. `oh-my-dsh` turns those building blocks into an opinionated coding environment: sensible profiles, inert reuse of your existing MCP configuration, LSP navigation and recoverable semantic rename, upstream `@file` discovery with anchored line-range snapshots, stale-safe editing, SSRF-hardened web fetch on by default, optional DAP debugging, notifications, usage reporting, persistent code kernels, and approval-gated skill distillation that turns verified procedures into reusable skills.
 
 It is a native curated distribution, not a fork. You keep upstream's “everything is a plugin” architecture and can override every choice.
 
@@ -235,9 +235,9 @@ Static discipline is enforced before a proposal can exist: valid ESM only (V8 pa
 
 `opt_control` picks the next harness mutation from a locked action set — `prepare_promote`, `prepare_forge`, `prepare_unload`, `prepare_save`, `noop` — using a durable policy file under `$DSH_HOME/omd/opt/policy.json`. Two actions: `suggest`, `show`. `suggest` credits new `eval_control compare` results against the last suggestion, observes only candidates that already pass the eval gates, and returns one arm plus a next tool call. It never applies a proposal, invents plugin source or a skill body, or writes [`presets/plugins.json`](presets/plugins.json). `/omd-opt` reads the policy. Select and retain stay on `proposal_control apply`.
 
-### Daily-use tools upstream does not prioritize
+### OMD daily-use extensions
 
-- `@file` mentions: reference workspace files in your message as `@path`, `@path:12-40`, or `@"path with spaces"`. The mentioned content is attached to the same model step, bounded in size, and rendered as `hash_edit`-compatible anchors. Parsing is text-only (no composer autocomplete); files outside the workspace are never attached.
+- `@file` discovery and anchored ranges: rc.8's Web composer completes ordinary `@path` and `@"path with spaces"` references. Those references remain path-only, so the model uses `read` when it needs their contents. Add `:start-end` — for example `@path:12-40` or `@"path with spaces":12-40` — to explicitly attach that workspace range to the same model step as bounded, `hash_edit`-compatible anchors. Range snapshots work in both profiles.
 - `hash_edit` performs stale-safe multi-line replacement using per-line anchors and a final filesystem version guard.
 - `semantic_refactor` prepares version-guarded, recoverable multi-file LSP rename transactions.
 - `kernel` provides session-persistent JavaScript and Python state, with callbacks into dsh tools.
@@ -329,7 +329,7 @@ Semantic refactors accept text-only `WorkspaceEdit` results. Resource create/del
 - Project integrations are gated by `omd trust`.
 - MCP definitions do not start, expand environment placeholders, or expose schemas during discovery. Expansion happens on the host only after an approved activation and values never enter prompts or metadata caches.
 - Semantic refactors reject edits outside the session workspace and recheck every observed file version before writing.
-- `@file` mentions attach only workspace files, stay bounded, and treat attached content as data rather than instructions.
+- Only explicit `@file:start-end` ranges are attached by OMD. They resolve only workspace files, stay bounded, and treat attached content as data rather than instructions; plain `@file` references attach nothing.
 - Web fetch blocks private, loopback, link-local, and cloud-metadata destinations both at URL validation and at DNS-connect time (rebinding-safe). `OMD_WEB_FETCH_ALLOW_PRIVATE=1` removes that guard; `DSH_WEB_FETCH_PROVIDER=http` selects upstream's provider, which has no such protection.
 - DAP debugging is off until `OMD_ENABLE_DEBUG=1`. Launch and attach still require an approved proposal; debuggee paths stay inside the workspace.
 - Glob-scoped Cursor rules are not applied globally when dsh cannot determine the active file.
